@@ -2,6 +2,7 @@
 // Key names omit the leading "_" from Unity property names to preserve the presets.json mapping.
 import * as THREE from 'three/webgpu';
 import { uniform } from 'three/tsl';
+import { publicAsset } from '../assets.ts';
 
 export type WaterUniforms = ReturnType<typeof createWaterUniforms>;
 
@@ -184,11 +185,11 @@ export const TEXTURE_SLOTS = [
 export type TextureSlot = (typeof TEXTURE_SLOTS)[number];
 
 export const DEFAULT_TEXTURES: Record<TextureSlot, string> = {
-  SurfFoam_Map: '/textures/water/foam1.png',
-  SurfaceDistortion_Map: '/textures/water/noise1.png',
-  InterSec_Foam_Mask: '/textures/water/noise2.png',
-  SL_Dissolve_Mask: '/textures/water/noise3.png',
-  Normal_Map: '/textures/water/normal1.png',
-  Caustics_Map: '/textures/water/caustic1.png',
-  Caustics_Distortion_Map: '/textures/water/noise4.png',
+  SurfFoam_Map: publicAsset('textures/water/foam1.png'),
+  SurfaceDistortion_Map: publicAsset('textures/water/noise1.png'),
+  InterSec_Foam_Mask: publicAsset('textures/water/noise2.png'),
+  SL_Dissolve_Mask: publicAsset('textures/water/noise3.png'),
+  Normal_Map: publicAsset('textures/water/normal1.png'),
+  Caustics_Map: publicAsset('textures/water/caustic1.png'),
+  Caustics_Distortion_Map: publicAsset('textures/water/noise4.png'),
 };

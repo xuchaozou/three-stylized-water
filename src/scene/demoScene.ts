@@ -22,6 +22,7 @@ import {
   vec2,
   vec3,
 } from 'three/tsl';
+import { publicAsset } from '../assets.ts';
 
 export interface DemoSceneHandles {
   sun: THREE.DirectionalLight;
@@ -67,7 +68,7 @@ const TERRAIN_HEIGHT = 600;
 const TERRAIN_Y0 = -20;
 
 async function buildTerrain(): Promise<THREE.Mesh> {
-  const buf = await fetch('/terrain/heightmap-f32.bin').then((r) => r.arrayBuffer());
+  const buf = await fetch(publicAsset('terrain/heightmap-f32.bin')).then((r) => r.arrayBuffer());
   const h = new Float32Array(buf); // row-major [z][x], 0..1
   const n = TERRAIN_N;
   const step = TERRAIN_SIZE / (n - 1);
@@ -119,12 +120,12 @@ async function buildTerrain(): Promise<THREE.Mesh> {
   geo.setIndex(new THREE.BufferAttribute(idx, 1));
   geo.computeBoundingSphere();
 
-  const splat = loadTex('/terrain/splatmap.png', false);
+  const splat = loadTex(publicAsset('terrain/splatmap.png'), false);
   splat.wrapS = splat.wrapT = THREE.ClampToEdgeWrapping;
-  const grassCol = loadTex('/textures/scene/grass_color.png', true);
-  const grassNrm = loadTex('/textures/scene/grass_normal.png', false);
-  const sandCol = loadTex('/textures/scene/sand_color.png', true);
-  const sandNrm = loadTex('/textures/scene/sand_normal.png', false);
+  const grassCol = loadTex(publicAsset('textures/scene/grass_color.png'), true);
+  const grassNrm = loadTex(publicAsset('textures/scene/grass_normal.png'), false);
+  const sandCol = loadTex(publicAsset('textures/scene/sand_color.png'), true);
+  const sandNrm = loadTex(publicAsset('textures/scene/sand_normal.png'), false);
 
   // Tile every 4 m. Base UVs on Unity coordinates (x, zu), where zu = -z_three, to match the pattern orientation.
   const tileUV = vec2(positionWorld.x, positionWorld.z.negate()).mul(1 / 4);
@@ -250,7 +251,7 @@ async function buildHumans(scene: THREE.Scene) {
   const humanMat = urpLit(lin(0.9433962, 0.387595862, 0.307048738));
   let geo: THREE.BufferGeometry | null = null;
   try {
-    const root = await new FBXLoader().loadAsync('/models/human.fbx');
+    const root = await new FBXLoader().loadAsync(publicAsset('models/human.fbx'));
     root.traverse((o) => {
       if (!geo && (o as THREE.Mesh).isMesh) geo = (o as THREE.Mesh).geometry;
     });
@@ -282,7 +283,7 @@ async function buildHumans(scene: THREE.Scene) {
 
 export async function buildDemoScene(scene: THREE.Scene): Promise<DemoSceneHandles> {
   // Unity render calibration gives 1.21 for both sky and environment intensity.
-  const skyTex = texLoader.load('/textures/scene/sky_22_2k.png');
+  const skyTex = texLoader.load(publicAsset('textures/scene/sky_22_2k.png'));
   skyTex.mapping = THREE.EquirectangularReflectionMapping;
   skyTex.colorSpace = THREE.SRGBColorSpace;
   scene.background = skyTex;

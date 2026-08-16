@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import presetsJson from './presets.json';
+import { publicAsset } from '../assets.ts';
 import { unityPropToKey, TEXTURE_SLOTS, HDR_COLOR_KEYS, gammaColorToLinear } from './uniforms';
 import type { WaterUniforms, TextureSlot } from './uniforms';
 
@@ -21,22 +22,22 @@ export const DEFAULT_PRESET = PRESETS._demoDefault && PRESETS.presets[PRESETS._d
   : (PRESET_NAMES[0] ?? '');
 
 const TEX_URL: Record<string, string> = {
-  'Caustic 1.png': '/textures/water/caustic1.png',
-  'Caustic 2.png': '/textures/water/caustic2.png',
-  'Caustic 3.png': '/textures/water/caustic3.png',
-  'Foam 1.png': '/textures/water/foam1.png',
-  'Foam2.psd': '/textures/water/foam2.png',
-  'Noise 1.png': '/textures/water/noise1.png',
-  'Noise 2.png': '/textures/water/noise2.png',
-  'Noise 3.png': '/textures/water/noise3.png',
-  'Noise 4.png': '/textures/water/noise4.png',
-  'Noise 5.png': '/textures/water/noise5.png',
-  'Noise 6.png': '/textures/water/noise6.png',
-  'Noise 7.png': '/textures/water/noise7.png',
-  'Noise 8.png': '/textures/water/noise8.png',
-  'Normal 1.png': '/textures/water/normal1.png',
-  'Normal 2.png': '/textures/water/normal2.png',
-  'Normal 3.png': '/textures/water/normal3.png',
+  'Caustic 1.png': publicAsset('textures/water/caustic1.png'),
+  'Caustic 2.png': publicAsset('textures/water/caustic2.png'),
+  'Caustic 3.png': publicAsset('textures/water/caustic3.png'),
+  'Foam 1.png': publicAsset('textures/water/foam1.png'),
+  'Foam2.psd': publicAsset('textures/water/foam2.png'),
+  'Noise 1.png': publicAsset('textures/water/noise1.png'),
+  'Noise 2.png': publicAsset('textures/water/noise2.png'),
+  'Noise 3.png': publicAsset('textures/water/noise3.png'),
+  'Noise 4.png': publicAsset('textures/water/noise4.png'),
+  'Noise 5.png': publicAsset('textures/water/noise5.png'),
+  'Noise 6.png': publicAsset('textures/water/noise6.png'),
+  'Noise 7.png': publicAsset('textures/water/noise7.png'),
+  'Noise 8.png': publicAsset('textures/water/noise8.png'),
+  'Normal 1.png': publicAsset('textures/water/normal1.png'),
+  'Normal 2.png': publicAsset('textures/water/normal2.png'),
+  'Normal 3.png': publicAsset('textures/water/normal3.png'),
 };
 
 export function applyPreset(
@@ -77,7 +78,10 @@ export function applyPreset(
       setTexture(slot, TEX_URL[file]);
     } else {
       // Unity defaults for unassigned textures: "bump" (flat normal) for normals, "white" otherwise.
-      setTexture(slot, slot === 'Normal_Map' ? '/textures/water/_flatnormal.png' : '/textures/water/_white.png');
+      setTexture(
+        slot,
+        publicAsset(slot === 'Normal_Map' ? 'textures/water/_flatnormal.png' : 'textures/water/_white.png'),
+      );
     }
   }
   return true;

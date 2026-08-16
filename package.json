@@ -4,15 +4,16 @@
   "version": "0.1.0",
   "type": "module",
   "engines": {
-    "node": ">=22.16.0"
+    "node": ">=22.16.0",
+    "npm": ">=11.10.0"
   },
   "scripts": {
     "dev": "vite --host localhost --port 5180",
-    "build": "vite build",
+    "build": "vite build && node tools/check-pages-build.mjs",
     "preview": "vite preview",
     "check": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "lint": "tsc --noEmit && node --check tools/perf.mjs",
+    "lint": "tsc --noEmit && node --check tools/perf.mjs && node --check tools/check-pages-build.mjs",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "perf": "node tools/perf.mjs"
   },
