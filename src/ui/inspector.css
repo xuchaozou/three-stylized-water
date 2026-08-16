@@ -1,0 +1,24 @@
+.water-inspector {
+  position: fixed;
+  z-index: 1000;
+  top: 12px;
+  right: 12px;
+  width: min(300px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: #596277 #181c20;
+}
+
+.water-inspector > .lil-gui.lil-root {
+  width: 100%;
+}
+
+@media (max-width: 520px) {
+  .water-inspector {
+    top: 8px;
+    right: 8px;
+    width: min(300px, calc(100vw - 16px));
+    max-height: calc(100vh - 16px);
+  }
+}
