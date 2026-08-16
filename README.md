@@ -4,6 +4,8 @@ This is a **three.js r185 WebGPU + TSL** port of
 [Uber Stylized Water](https://github.com/MatrixRex/Uber-Stylized-Water) (MIT / © 2025 MatrixRex),
 a stylized water shader for Unity URP. The demo scene also recreates the Unity version.
 
+**[Open the live demo](https://norio.github.io/three-stylized-water/)**
+
 ![showcase](docs/showcase.png)
 
 ## Getting Started
