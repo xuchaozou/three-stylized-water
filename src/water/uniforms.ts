@@ -69,6 +69,8 @@ export function createWaterUniforms() {
     InterSec_Foam_Smooth: f(0.01),
     InterSec_GradientDissolve: f(0),
     InterSec_Edge_Fade: f(0),
+    /** Extension: falloff [m] of the foam collar by horizontal distance to walls (baked `wallDist`); 0 = off. */
+    InterSec_WallDistance: f(0),
 
     // Shoreline
     ENABLESHORELINE: f(0),

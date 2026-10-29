@@ -1,4 +1,4 @@
-import { float, mix } from 'three/tsl';
+import { attribute, float, mix, step } from 'three/tsl';
 import type { WaterCtx, DepthData } from './types';
 import { flowRotate, smoothMask, surfDistortValue, uvPannerDistorted, worldUV } from './utils';
 
@@ -68,6 +68,15 @@ export function intersectionFoamMask(
 
 /** depthS is the screenUV DepthData (uses ws as the WaterDepth input). */
 export function buildIntersection(ctx: WaterCtx, depthS: DepthData): IntersectionData {
-  const mask = intersectionFoamMask(ctx, depthS.ws, worldUV());
-  return { mask: mask.mul(ctx.u.Enable_Intersection) };
+  const { u } = ctx;
+  // Depth-based foam only appears where the view ray meets geometry just below the surface, which
+  // misses a wall seen from above. A baked horizontal wall distance gives a view-independent collar.
+  let waterDepth: any = depthS.ws;
+  if (ctx.mesh?.geometry?.hasAttribute('wallDist')) {
+    const range = u.InterSec_WallDistance;
+    const wall = (attribute('wallDist', 'float') as any).div(range.max(1e-3)).negate().exp().mul(step(1e-3, range));
+    waterDepth = waterDepth.max(wall);
+  }
+  const mask = intersectionFoamMask(ctx, waterDepth, worldUV());
+  return { mask: mask.mul(u.Enable_Intersection) };
 }

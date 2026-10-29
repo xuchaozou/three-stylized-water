@@ -1,7 +1,8 @@
 import * as THREE from 'three/webgpu';
 import presetsJson from './presets.json';
+import overridesJson from './plantOverrides.json';
 import { publicAsset } from '../assets.ts';
-import { unityPropToKey, TEXTURE_SLOTS, HDR_COLOR_KEYS, gammaColorToLinear } from './uniforms';
+import { unityPropToKey, TEXTURE_SLOTS, HDR_COLOR_KEYS, gammaColorToLinear, UNITY_PROP_MAP } from './uniforms';
 import type { WaterUniforms, TextureSlot } from './uniforms';
 import { buildPlantPresets, PLANT_PRESET_NAMES } from './plantStyles.ts';
 
@@ -16,11 +17,30 @@ export interface PresetsFile {
   }>;
 }
 
+type PresetEntry = PresetsFile['presets'][string];
+
 const UNITY_PRESETS: PresetsFile = presetsJson as any;
+/** Edits saved from the inspector ("保存当前配置"), layered over the generated/Unity presets. */
+const OVERRIDES: Record<string, PresetEntry> = overridesJson as any;
+
+function withOverride(name: string, base: PresetEntry): PresetEntry {
+  const o = OVERRIDES[name];
+  if (!o) return base;
+  return {
+    ...base,
+    floats: { ...base.floats, ...o.floats },
+    vectors: { ...base.vectors, ...o.vectors },
+    colors: { ...base.colors, ...o.colors },
+    textures: { ...base.textures, ...o.textures },
+  };
+}
+
+const BASE_PRESETS = { ...UNITY_PRESETS.presets, ...buildPlantPresets(UNITY_PRESETS.presets ?? {}) };
 export const PRESETS: PresetsFile = {
   ...UNITY_PRESETS,
-  presets: { ...UNITY_PRESETS.presets, ...buildPlantPresets(UNITY_PRESETS.presets ?? {}) },
+  presets: Object.fromEntries(Object.entries(BASE_PRESETS).map(([name, p]) => [name, withOverride(name, p)])),
 };
+export const hasSavedOverride = (name: string) => name in OVERRIDES;
 export const PRESET_NAMES = Object.keys(UNITY_PRESETS.presets ?? {});
 export { PLANT_PRESET_NAMES };
 export const DEFAULT_PRESET = PRESETS._demoDefault && PRESETS.presets[PRESETS._demoDefault]
@@ -54,7 +74,34 @@ const EXTENSION_DEFAULTS: Record<string, number> = {
   Flow_Aligned: 0,
   Flow_Stretch: 1,
   Normal_Shading: 0,
+  InterSec_WallDistance: 0,
 };
+
+const KEY_TO_UNITY_PROP = Object.fromEntries(Object.entries(UNITY_PROP_MAP).map(([prop, key]) => [key, prop]));
+const round = (x: number) => Math.round(x * 1e5) / 1e5;
+const linearToSrgb = (c: number) => (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
+
+/**
+ * Snapshot the current uniforms as a preset entry in presets.json units (the inverse of applyPreset):
+ * Unity property names, HDR colors linear, plain colors sRGB with linear alpha. Textures are not
+ * exported; the preset's own texture choices are kept.
+ */
+export function exportPresetEntry(u: WaterUniforms): PresetEntry {
+  const floats: Record<string, number> = {};
+  const vectors: Record<string, number[]> = {};
+  const colors: Record<string, number[]> = {};
+  for (const [key, un] of Object.entries(u) as Array<[string, { value: unknown }]>) {
+    const prop = KEY_TO_UNITY_PROP[key] ?? `_${key}`;
+    const v = un.value;
+    if (typeof v === 'number') floats[prop] = round(v);
+    else if (v instanceof THREE.Vector4) {
+      const rgb = HDR_COLOR_KEYS.has(key) ? [v.x, v.y, v.z] : [v.x, v.y, v.z].map(linearToSrgb);
+      colors[prop] = [...rgb, v.w].map(round);
+    } else if (v instanceof THREE.Vector3) vectors[prop] = [v.x, v.y, v.z, 0].map(round);
+    else if (v instanceof THREE.Vector2) vectors[prop] = [v.x, v.y, 0, 0].map(round);
+  }
+  return { floats, vectors, colors };
+}
 
 export function applyPreset(
   u: WaterUniforms,

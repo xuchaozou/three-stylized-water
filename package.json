@@ -8,7 +8,7 @@
     "npm": ">=11.10.0"
   },
   "scripts": {
-    "dev": "vite --host localhost --port 5180",
+    "dev": "vite",
     "build": "vite build && node tools/check-pages-build.mjs",
     "preview": "vite preview",
     "check": "tsc --noEmit",

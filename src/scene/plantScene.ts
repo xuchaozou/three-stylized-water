@@ -82,6 +82,70 @@ function prepareWaterMesh(mesh: THREE.Mesh) {
   mesh.layers.set(WATER_LAYER);
 }
 
+/** Farthest wall distance stored [m]; wall foam never reaches further, so beyond this is "open water". */
+const WALL_DISTANCE_MAX = 8;
+
+/**
+ * Bake each water vertex's horizontal distance to the nearest wall into a `wallDist` attribute.
+ * Walls are the structure triangles cut by the water plane, so partition walls inside one water
+ * rectangle count too. The shader uses it for a view-independent foam collar along the walls.
+ */
+function bakeWallDistance(water: THREE.Mesh, structures: THREE.Mesh[]) {
+  water.updateMatrixWorld(true);
+  const pos = water.geometry.getAttribute('position');
+  const v = new THREE.Vector3();
+  const waterY = v.fromBufferAttribute(pos, 0).applyMatrix4(water.matrixWorld).y;
+
+  // Wall outlines at water level as 2D segments (x0, z0, x1, z1).
+  const segs: number[] = [];
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const cut: number[] = [];
+  const edge = (p: THREE.Vector3, q: THREE.Vector3) => {
+    const dp = p.y - waterY;
+    const dq = q.y - waterY;
+    if ((dp < 0) === (dq < 0)) return;
+    const t = dp / (dp - dq);
+    cut.push(p.x + (q.x - p.x) * t, p.z + (q.z - p.z) * t);
+  };
+  for (const s of structures) {
+    s.updateMatrixWorld(true);
+    const sp = s.geometry.getAttribute('position');
+    const index = s.geometry.getIndex();
+    const triCount = (index ? index.count : sp.count) / 3;
+    for (let i = 0; i < triCount; i++) {
+      const i0 = index ? index.getX(i * 3) : i * 3;
+      const i1 = index ? index.getX(i * 3 + 1) : i * 3 + 1;
+      const i2 = index ? index.getX(i * 3 + 2) : i * 3 + 2;
+      a.fromBufferAttribute(sp, i0).applyMatrix4(s.matrixWorld);
+      b.fromBufferAttribute(sp, i1).applyMatrix4(s.matrixWorld);
+      c.fromBufferAttribute(sp, i2).applyMatrix4(s.matrixWorld);
+      cut.length = 0;
+      edge(a, b);
+      edge(b, c);
+      edge(c, a);
+      if (cut.length >= 4) segs.push(cut[0], cut[1], cut[2], cut[3]);
+    }
+  }
+
+  const dist = new Float32Array(pos.count);
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).applyMatrix4(water.matrixWorld);
+    let best = WALL_DISTANCE_MAX * WALL_DISTANCE_MAX;
+    for (let k = 0; k < segs.length; k += 4) {
+      const ex = segs[k + 2] - segs[k];
+      const ez = segs[k + 3] - segs[k + 1];
+      const len2 = ex * ex + ez * ez;
+      const t = len2 > 0 ? Math.min(1, Math.max(0, ((v.x - segs[k]) * ex + (v.z - segs[k + 1]) * ez) / len2)) : 0;
+      const dx = v.x - (segs[k] + ex * t);
+      const dz = v.z - (segs[k + 1] + ez * t);
+      best = Math.min(best, dx * dx + dz * dz);
+    }
+    dist[i] = Math.sqrt(best);
+  }
+  water.geometry.setAttribute('wallDist', new THREE.BufferAttribute(dist, 1));}
+
 /** Concrete tank walls: the GLB ships metallic 0.3, which reads as painted steel under the sky probe. */
 function prepareStructureMesh(mesh: THREE.Mesh) {
   mesh.castShadow = true;
@@ -221,11 +285,16 @@ export async function buildPlantScene(
     const waterMeshes = collectWaterMeshes(root);
     if (waterMeshes.length === 0) console.warn(`[plantScene] "${WATER_GROUP_NAME}" has no meshes in ${def.name}`);
     const waterSet = new Set<THREE.Object3D>(waterMeshes);
+    const structures: THREE.Mesh[] = [];
     root.traverse((o) => {
       if (!(o as THREE.Mesh).isMesh) return;
       if (waterSet.has(o)) prepareWaterMesh(o as THREE.Mesh);
-      else prepareStructureMesh(o as THREE.Mesh);
+      else {
+        prepareStructureMesh(o as THREE.Mesh);
+        structures.push(o as THREE.Mesh);
+      }
     });
+    for (const mesh of waterMeshes) bakeWallDistance(mesh, structures);
 
     const box = new THREE.Box3().setFromObject(root);
     const c = box.getCenter(new THREE.Vector3());

@@ -2,9 +2,11 @@ import GUI from 'lil-gui';
 import { Vector2, Vector3, Vector4 } from 'three/webgpu';
 import type { WaterUniforms } from '../water/uniforms';
 import {
+  ADVANCED_SECTIONS,
   applyAlphaControlSnapshot,
   applyColorControlSnapshot,
-  INSPECTOR_SECTIONS,
+  type FieldSpec,
+  PRIMARY_SECTIONS,
   syncUniformControlSnapshot,
   TOGGLE_KEYS,
   uniformControlSnapshot,
@@ -32,24 +34,13 @@ export interface InspectorOptions {
   onPalette?: (name: string) => void;
   /** One-line description per preset, shown under the preset selector. */
   presetNotes?: Record<string, string>;
+  /** Also list the remaining raw Unity parameters (demo scene); the plant scene keeps only curated ones. */
+  advanced?: boolean;
+  /** Save the current values as the selected preset's override (and log the JSON). */
+  onSave?: (presetName: string) => void;
+  /** Drop the saved override so the preset returns to its original definition. */
+  onClearSaved?: (presetName: string) => void;
 }
-
-const FLOW_FIELDS: Array<[key: keyof WaterUniforms, label: string, min: number, max: number, step: number]> = [
-  ['Flow_Speed', '流速倍率', 0, 20, 0.05],
-  ['Flow_Direction', '水流方向(°)', 0, 360, 1],
-  ['Normal_CrossAngle', '波纹交错角(°)', 0, 180, 1],
-  ['Flow_Stretch', '波纹顺流拉伸', 1, 6, 0.1],
-  ['Normal_Shading', '波纹明暗(光照)', 0, 3, 0.01],
-  ['Normal_Strength', '波纹强度', 0, 2, 0.01],
-  ['Normal_Scale', '波纹密度', 1, 30, 0.1],
-];
-
-const BASE_COLOR_FIELDS: Array<[key: keyof WaterUniforms, label: string]> = [
-  ['Color_Shallow', '浅水/近壁颜色'],
-  ['Color_Deep', '深水颜色'],
-  ['SurfFoam_Color', '浮渣/泡沫颜色'],
-  ['InterSec_Color', '池壁泡沫颜色'],
-];
 
 export interface InspectorHandle {
   element: HTMLElement;
@@ -65,19 +56,28 @@ export function mountInspector(u: WaterUniforms, opts: InspectorOptions): Inspec
 
   const gui = new GUI({ container: host, title: 'Water Inspector' });
   const controls = uniformControlSnapshot(u) as ControlState;
+  const syncHooks: Array<() => void> = [];
   const refresh = () => {
     syncUniformControlSnapshot(controls, u);
+    syncHooks.forEach((sync) => sync());
     gui.controllersRecursive().forEach((controller) => controller.updateDisplay());
   };
 
   addGeneralControls(gui, opts, refresh);
-  addBaseColorControls(gui, u, controls, opts, refresh);
-  addFlowControls(gui, u, controls, opts);
-  for (const [section, keys] of INSPECTOR_SECTIONS) {
-    const folder = gui.addFolder(section).close();
-    for (const key of keys) {
-      const uniform = u[key] as MutableUniform;
-      addUniformControl(folder, String(key), uniform, controls, opts);
+  for (const [title, fields, open] of PRIMARY_SECTIONS) {
+    const folder = gui.addFolder(title);
+    if (!open) folder.close();
+    if (title === '基础颜色配置') addPaletteControl(folder, opts, refresh);
+    for (const field of fields) addFieldControl(folder, field, u, controls, opts, syncHooks);
+  }
+  if (opts.advanced) {
+    const advanced = gui.addFolder('高级参数 (Unity)').close();
+    for (const [section, keys] of ADVANCED_SECTIONS) {
+      const folder = advanced.addFolder(section).close();
+      for (const key of keys) {
+        const uniform = u[key] as MutableUniform;
+        addUniformControl(folder, String(key), uniform, controls, opts);
+      }
     }
   }
 
@@ -112,56 +112,85 @@ function addGeneralControls(gui: GUI, opts: InspectorOptions, refresh: () => voi
   });
   if (opts.presetNotes) general.add(info, 'note').name('工艺说明').disable();
   general.add(state, 'reset').name('重置为预设');
+  if (opts.onSave) {
+    const actions = {
+      save: () => opts.onSave!(state.preset),
+      clear: () => opts.onClearSaved?.(state.preset),
+    };
+    general.add(actions, 'save').name('保存配置');
+    if (opts.onClearSaved) general.add(actions, 'clear').name('清除已保存修改');
+  }
   general.add(state, 'camera', opts.camNames).name('Camera').onChange(opts.onCam);
   general.add(opts.state, 'freeze').name('Freeze Time').onChange(() => opts.onInteraction?.());
 }
 
-function addBaseColorControls(
-  gui: GUI,
-  u: WaterUniforms,
-  controls: ControlState,
-  opts: InspectorOptions,
-  refresh: () => void,
-) {
-  const folder = gui.addFolder('基础颜色配置').open();
-  if (opts.paletteNames?.length && opts.onPalette) {
-    const palette = { name: '' };
-    folder.add(palette, 'name', opts.paletteNames).name('水色方案').onChange((name: string) => {
-      opts.onPalette!(name);
-      refresh();
-    });
-  }
-  for (const [key, label] of BASE_COLOR_FIELDS) {
-    const color = u[key].value as Vector4;
-    folder.addColor(controls, `${key}__color`).name(label).onChange(() => {
-      applyColorControlSnapshot(key, color, controls);
-      opts.onInteraction?.();
-    });
-    folder.add(controls, `${key}__alpha`).name(`${label} 不透明度`).min(0).max(1).step(0.01).onChange(() => {
-      applyAlphaControlSnapshot(key, color, controls);
-      opts.onInteraction?.();
-    });
-  }
-  folder.add(controls, 'Water_Depth').name('颜色过渡深度(m)').min(0.05).max(10).step(0.01).onChange((next: number) => {
-    if (!Number.isFinite(next)) return;
-    u.Water_Depth.value = next;
-    opts.onInteraction?.();
+function addPaletteControl(folder: GUI, opts: InspectorOptions, refresh: () => void) {
+  if (!opts.paletteNames?.length || !opts.onPalette) return;
+  const palette = { name: '' };
+  folder.add(palette, 'name', opts.paletteNames).name('水色方案').onChange((name: string) => {
+    opts.onPalette!(name);
+    refresh();
   });
 }
 
-function addFlowControls(gui: GUI, u: WaterUniforms, controls: ControlState, opts: InspectorOptions) {
-  const folder = gui.addFolder('水流配置').open();
-  for (const [key, label, min, max, step] of FLOW_FIELDS) {
-    folder.add(controls, key).name(label).min(min).max(max).step(step).onChange((next: number) => {
-      if (!Number.isFinite(next)) return;
-      (u[key] as MutableUniform).value = next;
-      opts.onInteraction?.();
-    });
+function addFieldControl(
+  folder: GUI,
+  field: FieldSpec,
+  u: WaterUniforms,
+  controls: ControlState,
+  opts: InspectorOptions,
+  syncHooks: Array<() => void>,
+) {
+  const key = field.key;
+  const uniform = u[key] as MutableUniform;
+  switch (field.kind) {
+    case 'number':
+      folder.add(controls, key).name(field.label).min(field.min).max(field.max).step(field.step)
+        .onChange((next: number) => {
+          if (!Number.isFinite(next)) return;
+          uniform.value = next;
+          opts.onInteraction?.();
+        });
+      return;
+    case 'toggle':
+      folder.add(controls, key).name(field.label).onChange((on: boolean) => {
+        uniform.value = on ? 1 : 0;
+        opts.onInteraction?.();
+      });
+      return;
+    case 'color': {
+      const color = uniform.value as Vector4;
+      folder.addColor(controls, `${key}__color`).name(field.label).onChange(() => {
+        applyColorControlSnapshot(key, color, controls);
+        opts.onInteraction?.();
+      });
+      // Specular is additive HDR: it needs an intensity, and its alpha is unused.
+      if (key === 'Specular_Color') {
+        folder.add(controls, `${key}__intensity`).name(`${field.label} 强度`).min(1).max(20).step(0.1).onChange(() => {
+          applyColorControlSnapshot(key, color, controls);
+          opts.onInteraction?.();
+        });
+        return;
+      }
+      folder.add(controls, `${key}__alpha`).name(`${field.label} 不透明度`).min(0).max(1).step(0.01).onChange(() => {
+        applyAlphaControlSnapshot(key, color, controls);
+        opts.onInteraction?.();
+      });
+      return;
+    }
+    case 'drift': {
+      // Panners add `pan * t` to the flow-frame UV, so a negative x moves the pattern downstream.
+      const pan = uniform.value as Vector2;
+      const state = { speed: -pan.x };
+      syncHooks.push(() => { state.speed = -pan.x; });
+      folder.add(state, 'speed').name(field.label).min(field.min).max(field.max).step(field.step)
+        .onChange((next: number) => {
+          if (!Number.isFinite(next)) return;
+          pan.set(-next, 0);
+          opts.onInteraction?.();
+        });
+    }
   }
-  folder.add(controls, 'Flow_Aligned').name('顺流波纹').onChange((on: boolean) => {
-    u.Flow_Aligned.value = on ? 1 : 0;
-    opts.onInteraction?.();
-  });
 }
 
 function addUniformControl(

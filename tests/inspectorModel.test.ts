@@ -3,9 +3,11 @@ import test from 'node:test';
 import { Vector4 } from 'three/webgpu';
 import { createWaterUniforms } from '../src/water/uniforms.ts';
 import {
+  ADVANCED_SECTIONS,
   applyAlphaControlSnapshot,
   applyColorControlSnapshot,
   INSPECTOR_SECTIONS,
+  PRIMARY_SECTIONS,
   syncUniformControlSnapshot,
   uniformControlSnapshot,
 } from '../src/ui/inspectorModel.ts';
@@ -13,6 +15,17 @@ import {
 test('Inspector sections cover every water uniform without duplicates', () => {
   const uniforms = createWaterUniforms();
   const keys = INSPECTOR_SECTIONS.flatMap(([, sectionKeys]) => sectionKeys);
+
+  assert.deepEqual([...keys].sort(), Object.keys(uniforms).sort());
+  assert.equal(new Set(keys).size, keys.length);
+});
+
+test('curated and advanced inspector sections list every uniform exactly once', () => {
+  const uniforms = createWaterUniforms();
+  const keys = [
+    ...PRIMARY_SECTIONS.flatMap(([, fields]) => fields.map((f) => f.key)),
+    ...ADVANCED_SECTIONS.flatMap(([, sectionKeys]) => sectionKeys),
+  ];
 
   assert.deepEqual([...keys].sort(), Object.keys(uniforms).sort());
   assert.equal(new Set(keys).size, keys.length);

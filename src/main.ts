@@ -10,8 +10,8 @@ import { CAMS, DEFAULT_CAM, DEFAULT_PLANT_CAM, PLANT_CAMS } from './scene/cams';
 import { createWaterUniforms } from './water/uniforms';
 import type { WaterUniforms } from './water/uniforms';
 import { buildWaterMaterial, createTextureRegistry } from './water/WaterMaterial';
-import { applyPreset, PRESET_NAMES, PLANT_PRESET_NAMES, DEFAULT_PRESET } from './water/presets';
-import { applyColorPalette, COLOR_PALETTE_NAMES, PLANT_WATER_TYPES } from './water/plantStyles';
+import { applyPreset, exportPresetEntry, PRESET_NAMES, PLANT_PRESET_NAMES, DEFAULT_PRESET } from './water/presets';
+import { applyColorPalette, COLOR_PALETTE_NAMES, exportWaterTypeSpec, PLANT_WATER_TYPES } from './water/plantStyles';
 import { parseUrlState } from './ui/urlState';
 import type { ReflectionSetup, WaterCtx } from './water/nodes/types';
 
@@ -22,6 +22,39 @@ interface WaterBody {
   preset: string;
   /** Integrated per body so changing Flow_Speed never makes the animation phase jump. */
   time: { value: number };
+}
+
+/** Logs a plantStyles.ts-shaped spec and, on the dev server, persists a Unity-format override. */
+async function savePresetOverride(
+  name: string,
+  entry: ReturnType<typeof exportPresetEntry> | null,
+  spec?: ReturnType<typeof exportWaterTypeSpec>,
+) {
+  if (spec) {
+    console.log(`[水面配置] "${name}"  把下面这段替换 src/water/plantStyles.ts → PLANT_WATER_TYPES 中的同名项：`);
+    console.log(JSON.stringify({ [name]: spec }, null, 2));
+  } else if (entry) {
+    console.log(`[水面配置] "${name}" 当前配置（presets.json 格式）:`);
+    console.log(JSON.stringify({ [name]: entry }, null, 2));
+  }
+  if (!import.meta.env.DEV) {
+    console.warn('[水面配置] 非开发服务器，未写入文件；可将上面的 JSON 手动粘贴到 src/water/plantOverrides.json');
+    return;
+  }
+  try {
+    const res = await fetch('/__save-water-preset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, entry }),
+    });
+    const out = await res.json();
+    if (!out.ok) throw new Error(out.error);
+    console.log(entry
+      ? `[水面配置] 已写入 ${out.file}，刷新后预设 "${name}" 即为此配置`
+      : `[水面配置] 已清除 "${name}" 的保存修改，刷新后恢复 plantStyles.ts 中的原始预设`);
+  } catch (err) {
+    console.error('[水面配置] 写入失败:', err);
+  }
 }
 
 const state = parseUrlState();
@@ -187,6 +220,9 @@ async function init() {
         currentTarget: body.name,
         // Defer so lil-gui finishes its change handler before the GUI is destroyed.
         onTarget: (name) => setTimeout(() => mountFor(bodies.find((b) => b.name === name) ?? body)),
+        advanced: !isPlant,
+        onSave: (name) => savePresetOverride(name, exportPresetEntry(body.u), exportWaterTypeSpec(body.u, name)),
+        onClearSaved: (name) => savePresetOverride(name, null),
         presetNotes: Object.fromEntries(Object.entries(PLANT_WATER_TYPES).map(([k, v]) => [k, v.note])),
         paletteNames: COLOR_PALETTE_NAMES,
         onPalette: (name) => {

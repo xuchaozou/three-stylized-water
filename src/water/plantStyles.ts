@@ -90,6 +90,7 @@ export const PLANT_WATER_TYPES: Record<string, WaterTypeSpec> = {
     reflection: 1, specular: 12, spread: 0.02,
     rippleFlow: { cross: 20, stretch: 1.2 },
     shading: 1.2,
+    edge: { color: [0.95, 0.97, 1, 0.6], width: 0.5 },
     flow: 1,
   },
 
@@ -207,12 +208,15 @@ function specToPreset(s: WaterTypeSpec): PresetEntry {
 
     _Enable_Intersection: s.edge ? 1 : 0,
     _InterSec_Width: s.edge?.width ?? 0.5,
-    _InterSec_Dissolve: 1.2,
-    _InterSec_Foam_Scale: 6,
+    _InterSec_Dissolve: 2.2,
+    _InterSec_Foam_Scale: 8,
     _InterSec_Foam_Smooth: 0.2,
-    _InterSec_Foam_Invert: 0,
+    // Noise 2 is mostly dark; inverted, it leaves foam with a broken outer edge instead of none.
+    _InterSec_Foam_Invert: 1,
     _InterSec_GradientDissolve: 0,
-    _InterSec_Edge_Fade: 1,
+    // Edge fade caps the collar at ~50% opacity; the wall-distance band already fades out softly.
+    _InterSec_Edge_Fade: 0,
+    _InterSec_WallDistance: 0.6,
 
     _ENABLE_UNDERWATERLAYER: s.underwater ? 1 : 0,
     _UnderWater_Depth: -3,
@@ -307,6 +311,105 @@ function setFromHex(target: THREE.Vector4, hex: string, alpha: number) {
 }
 
 /** Uniforms are always linear, so convert both HDR and plain colors from the sRGB swatch. */
+const r3 = (x: number) => Math.round(x * 1e3) / 1e3;
+const r4 = (x: number) => Math.round(x * 1e4) / 1e4;
+const linearToSrgb = (c: number) => {
+  const s = c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(Math.max(c, 0), 1 / 2.4) - 0.055;
+  return Math.min(1, Math.max(0, s));
+};
+
+function hdrRgba(v: THREE.Vector4): Rgba {
+  return [r4(v.x), r4(v.y), r4(v.z), r4(v.w)];
+}
+
+function srgbRgba(v: THREE.Vector4): Rgba {
+  return [r3(linearToSrgb(v.x)), r3(linearToSrgb(v.y)), r3(linearToSrgb(v.z)), r4(v.w)];
+}
+
+function n(u: WaterUniforms, key: keyof WaterUniforms): number {
+  return (u[key] as { value: number }).value;
+}
+
+function v2(u: WaterUniforms, key: keyof WaterUniforms): THREE.Vector2 {
+  return u[key].value as THREE.Vector2;
+}
+
+function v4(u: WaterUniforms, key: keyof WaterUniforms): THREE.Vector4 {
+  return u[key].value as THREE.Vector4;
+}
+
+/**
+ * Snapshot the live uniforms as a `WaterTypeSpec` that can replace the matching entry in
+ * `PLANT_WATER_TYPES`. Process/note/texture names are taken from the original spec when present.
+ */
+export function exportWaterTypeSpec(u: WaterUniforms, name: string): WaterTypeSpec {
+  const base = PLANT_WATER_TYPES[name];
+  const on = (key: keyof WaterUniforms) => n(u, key) >= 0.5;
+  const spec: WaterTypeSpec = {
+    process: base?.process ?? (name.startsWith('污水') ? '污水厂' : '给水厂'),
+    note: base?.note ?? '',
+    shallow: hdrRgba(v4(u, 'Color_Shallow')),
+    deep: hdrRgba(v4(u, 'Color_Deep')),
+    depth: r3(n(u, 'Water_Depth')),
+    refraction: r3(n(u, 'Refraction_Strength')),
+    ripple: {
+      strength: r3(n(u, 'Normal_Strength')),
+      scale: r3(n(u, 'Normal_Scale')),
+      speed: r3(n(u, 'Normal_Pan')),
+    },
+    waves: {
+      height: r4(n(u, 'Wave1_Height')),
+      length: r3(n(u, 'Wave1_Length')),
+      speed: r3(n(u, 'Wave1_Speed')),
+      sharp: r3(n(u, 'Wave1_Sharpness')),
+    },
+    reflection: r3(n(u, 'Reflection_Strength')),
+    specular: r3(v4(u, 'Specular_Color').x),
+    spread: r3(n(u, 'Specular_Spread')),
+    flow: r3(n(u, 'Flow_Speed')),
+  };
+  if (base?.ripple.map) spec.ripple.map = base.ripple.map;
+  if (on('ENABLECAUSTICS')) spec.caustics = r3(n(u, 'Caustics_Strength'));
+
+  if (on('Enable_SurfaceFoam')) {
+    const tileX = v2(u, 'SurfFoam_Tile').x;
+    const stretch = tileX > 1e-4 ? r3(1 / tileX) : 1;
+    const distort = r3(n(u, 'SurfaceDistortion_Strength'));
+    spec.scum = {
+      map: base?.scum?.map ?? CLOUDY,
+      color: srgbRgba(v4(u, 'SurfFoam_Color')),
+      scale: r3(n(u, 'SurfFoam_Scale')),
+      edge: r3(n(u, 'SurfFoam_Edge')),
+      smooth: r3(n(u, 'SurfFoam_EdgeSmooth')),
+      drift: r3(-v2(u, 'SurfFoam_Pan').x),
+    };
+    if (stretch !== 1) spec.scum.stretch = stretch;
+    if (distort !== 0) spec.scum.distort = distort;
+  }
+
+  if (on('Enable_Intersection')) {
+    spec.edge = {
+      color: srgbRgba(v4(u, 'InterSec_Color')),
+      width: r3(n(u, 'InterSec_Width')),
+    };
+  }
+
+  if (on('ENABLE_UNDERWATERLAYER')) spec.underwater = srgbRgba(v4(u, 'Underwater_Color'));
+
+  const cross = r3(n(u, 'Normal_CrossAngle'));
+  const stretch = r3(n(u, 'Flow_Stretch'));
+  const aligned = on('Flow_Aligned');
+  const stream = base?.stream ?? (aligned && cross < 40);
+  if (stream) spec.stream = true;
+  const defaultCross = stream ? 12 : 70;
+  const defaultStretch = stream ? 1.5 : 1;
+  if (cross !== defaultCross || stretch !== defaultStretch) spec.rippleFlow = { cross, stretch };
+
+  const shading = r3(n(u, 'Normal_Shading'));
+  if (shading !== 0.6) spec.shading = shading;
+  return spec;
+}
+
 export function applyColorPalette(u: WaterUniforms, name: string): boolean {
   const p = COLOR_PALETTES[name];
   if (!p) return false;
