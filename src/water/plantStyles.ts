@@ -3,7 +3,7 @@
 // into a full preset.
 // Color units follow presets.json: HDR keys (Color_Shallow / Color_Deep / Specular_Color) are linear,
 // every other color is sRGB; alpha is always linear.
-import * as THREE from 'three/webgpu';
+import * as THREE from 'three';
 import { srgbToLinear } from './uniforms.ts';
 import type { WaterUniforms } from './uniforms';
 

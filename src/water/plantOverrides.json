@@ -198,5 +198,205 @@
         0
       ]
     }
+  },
+  "给水·原水池": {
+    "floats": {
+      "_Water_Depth": 0.8,
+      "_WorldSpaceDepth": 1,
+      "_DistanceMask_Start": 10,
+      "_DistanceMask_Fade": 30,
+      "_ShoreFade": 1,
+      "_ShoreFade_Smoothness": 0.2,
+      "_Enable_SurfaceFoam": 1,
+      "_SurfFoam_AlphaBlend": 0,
+      "_Invert_SurfFoam": 0,
+      "_SurfFoam_Scale": 1.6,
+      "_SurfFoam_Edge": 0.5,
+      "_SurfFoam_EdgeSmooth": 0.25,
+      "_SurfaceDistortion_Scale": 3,
+      "_SurfaceDistortion_Strength": 0.25,
+      "_Enable_Intersection": 1,
+      "_InterSec_Width": 0.13,
+      "_InterSec_Dissolve": 3.07,
+      "_InterSec_Foam_Invert": 1,
+      "_InterSec_Foam_Scale": 8.9,
+      "_InterSec_Foam_Distortion": 3,
+      "_InterSec_Foam_Smooth": 0.24,
+      "_InterSec_GradientDissolve": 0,
+      "_InterSec_Edge_Fade": 0,
+      "_InterSec_WallDistance": 0.72,
+      "_ENABLESHORELINE": 0,
+      "_SL_WaterDepth": 0.3,
+      "_SL_Speed": 0.05,
+      "_SL_Ammount": 5,
+      "_SL_Thickness": 0.3,
+      "_SL_CenterMask": 0.5,
+      "_SL_CenterMaskFade": 0,
+      "_SL_Dissolve": 0.7,
+      "_SL_GradientDissolve": 0,
+      "_SL_MaskScale": 4,
+      "_SL_EnableTrail": 0,
+      "_SL_Trail_Fade": 1,
+      "_ENABLE_UNDERWATERLAYER": 0,
+      "_UnderWater_Depth": -3,
+      "_ConformToGeometry": 0,
+      "_UnderWater_ScaleModifier": 0,
+      "_UnderWater_Start": 5,
+      "_Underwater_Fade": 15,
+      "_ENABLENORMAL": 1,
+      "_Normal_Strength": 1.1,
+      "_Normal_Pan": 3,
+      "_Normal_Scale": 5,
+      "_Normal_DistanceStrength": 0.385,
+      "_Specular_Spread": 0.08,
+      "_Specular_Hardness": 0,
+      "_Specular_Size": 0,
+      "_ENABLEPLANERREFLECTION": 1,
+      "_Reflection_Strength": 0.9,
+      "_Reflection_Fresnel": 5,
+      "_Reflection_Distortion": 0.7,
+      "_ENABLEREFRACTION": 1,
+      "_Refraction_Strength": 0.12,
+      "_Refraction_Distance_Strength": 0.048,
+      "_Refraction_Distance_Fade": 3,
+      "_Refraction_Physical": 1,
+      "_Refraction_Thickness": 1.5,
+      "_Flow_Speed": 0.4,
+      "_Flow_Direction": 0,
+      "_Normal_CrossAngle": 12,
+      "_Flow_Aligned": 1,
+      "_Flow_Stretch": 1.5,
+      "_Normal_Shading": 0.6,
+      "_ENABLECAUSTICS": 0,
+      "_Caustics_Depth": -6,
+      "_Caustics_Pan": 0.6,
+      "_Caustics_Scale": 2,
+      "_Caustics_Strength": 0,
+      "_Caustics_Distortion_Strength": 3,
+      "_Caustics_Distortion_Scale": 2,
+      "_Caustics_Start": 8,
+      "_Caustics_Fade": 25,
+      "_ENABLEWAVE": 1,
+      "_1st_Wave_Length": 1.4,
+      "_1st_Wave_Height": 0.015,
+      "_1st_Wave_Speed": 1.6,
+      "_1st_Wave_Sharpness": 0.4,
+      "_2nd_Wave_Length": 2.31,
+      "_2nd_Wave_Height": 0.0195,
+      "_2nd_Wave_Speed": 1.36,
+      "_2nd_Wave_Sharpness": 0.4
+    },
+    "vectors": {
+      "_SurfFoam_Pan": [
+        -0.4,
+        0,
+        0,
+        0
+      ],
+      "_SurfFoam_Tile": [
+        0.33333,
+        1,
+        0,
+        0
+      ],
+      "_SurfaceDistortion_Pan": [
+        -0.6,
+        0,
+        0,
+        0
+      ],
+      "_InterSec_Foam_Tile": [
+        1,
+        1,
+        0,
+        0
+      ],
+      "_InterSec_Foam_Pan": [
+        -0.08,
+        0,
+        0,
+        0
+      ],
+      "_SL_MaskPan": [
+        0.01,
+        0,
+        0,
+        0
+      ],
+      "_SL_MaskTile": [
+        1,
+        1,
+        0,
+        0
+      ],
+      "_1st_Wave_Direction": [
+        1,
+        0,
+        0.3,
+        0
+      ],
+      "_2nd_Wave_Direction": [
+        0.7,
+        0,
+        -0.7,
+        0
+      ]
+    },
+    "colors": {
+      "_Color_Shallow": [
+        0.32,
+        0.34,
+        0.18,
+        0.8
+      ],
+      "_Color_Deep": [
+        0.12,
+        0.15,
+        0.07,
+        0.95
+      ],
+      "_SurfFoam_Color": [
+        0.78,
+        0.76,
+        0.62,
+        0.8
+      ],
+      "_InterSec_Color": [
+        0.72,
+        0.7,
+        0.58,
+        0.33
+      ],
+      "_SL_Color": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "_Underwater_Color": [
+        0,
+        0,
+        0,
+        0.5
+      ],
+      "_ShadowColor": [
+        0,
+        0,
+        0,
+        0.4
+      ],
+      "_Specular_Color": [
+        8,
+        8,
+        8,
+        1
+      ],
+      "_Wave_Top_Color": [
+        1,
+        1,
+        1,
+        0
+      ]
+    }
   }
 }

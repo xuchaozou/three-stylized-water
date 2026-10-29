@@ -1,6 +1,4 @@
-import * as THREE from 'three/webgpu';
-import { Fn, pass, uniform, vec4 } from 'three/tsl';
-import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { FramePacer } from './rendering/FramePacer';
 import { selectPixelRatio } from './rendering/renderResolution';
@@ -9,7 +7,7 @@ import { buildPlantScene, LABEL_LAYER, PLANT_TONE_MAPPING_EXPOSURE, WATER_LAYER 
 import { CAMS, DEFAULT_CAM, DEFAULT_PLANT_CAM, PLANT_CAMS } from './scene/cams';
 import { createWaterUniforms } from './water/uniforms';
 import type { WaterUniforms } from './water/uniforms';
-import { buildWaterMaterial, createTextureRegistry } from './water/WaterMaterial';
+import { buildWaterMaterial, createTextureRegistry, renderOpaqueGrab } from './water/WaterMaterial';
 import { applyPreset, exportPresetEntry, PRESET_NAMES, PLANT_PRESET_NAMES, DEFAULT_PRESET } from './water/presets';
 import { applyColorPalette, COLOR_PALETTE_NAMES, exportWaterTypeSpec, PLANT_WATER_TYPES } from './water/plantStyles';
 import { parseUrlState } from './ui/urlState';
@@ -67,8 +65,7 @@ async function init() {
   const width = window.innerWidth;
   const height = window.innerHeight;
 
-  // Keep MSAA on the scene pass only; the full-screen blit does not need it.
-  const renderer = new THREE.WebGPURenderer({ antialias: false });
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
   // Unity uses Tonemapping=None, leaving only the linear-to-sRGB conversion.
   renderer.toneMapping = THREE.NoToneMapping;
   renderer.shadowMap.enabled = true;
@@ -81,8 +78,7 @@ async function init() {
   };
   setRendererSize(width, height);
   container.appendChild(renderer.domElement);
-  await renderer.init();
-  (window as any).__BACKEND = (renderer.backend as any).isWebGPUBackend ? 'webgpu' : 'webgl';
+  (window as any).__BACKEND = 'webgl';
 
   // Start rendering only after all assets finish loading (avoids PMREM/texture races).
   const assetsLoaded = new Promise<void>((resolve) => {
@@ -117,12 +113,13 @@ async function init() {
   controls.addEventListener('change', () => framePacer.noteActivity(performance.now()));
   applyCam(camId);
 
-  const sunDirection = uniform(new THREE.Vector3(0, 1, 0));
-  const sunColor = uniform(new THREE.Color(1, 1, 1));
-  const sunIntensity = uniform(1);
+  const sunDirection = { value: new THREE.Vector3(0, 1, 0) };
+  const sunColor = { value: new THREE.Color(1, 1, 1) };
+  const sunIntensity = { value: 1 };
 
   const presetNames = isPlant ? [...PLANT_PRESET_NAMES, ...PRESET_NAMES] : PRESET_NAMES;
   const bodies: WaterBody[] = [];
+  const allWater: THREE.Mesh[] = [];
   /** One uniform set per water body; every mesh of that body gets its own material (reflector per mesh). */
   const addWaterBody = (name: string, meshes: THREE.Mesh[], preset: string, reflection?: ReflectionSetup) => {
     const body: WaterBody = {
@@ -130,9 +127,10 @@ async function init() {
       u: createWaterUniforms(),
       texReg: createTextureRegistry(),
       preset,
-      time: uniform(state.t),
+      time: { value: state.t },
     };
     for (const mesh of meshes) {
+      allWater.push(mesh);
       const ctx: WaterCtx = {
         u: body.u,
         time: body.time,
@@ -239,44 +237,19 @@ async function init() {
     mountProfiler(renderer);
   }
 
-  // three's default bloom high-pass gates pixels at their original brightness, while URP subtracts
-  // the threshold with a soft knee. Keep the URP formula here rather than using luminosityHighPass:
-  //     b = max3(rgb); knee = T*0.5
-  //     s = clamp(b - T + knee, 0, 2*knee); s = s*s / (4*knee + 1e-4)
-  //     rgb *= max(b - T, s) / max(b, 1e-4)
-  const urpPrefilter = Fn(({ input, threshold }: any) => {
-    const c = input.rgb;
-    const b = c.r.max(c.g).max(c.b);
-    const knee = threshold.mul(0.5);
-    const soft = b.sub(threshold).add(knee).clamp(0, knee.mul(2));
-    const softened = soft.mul(soft).div(knee.mul(4).add(1e-4));
-    const multiplier = softened.max(b.sub(threshold)).div(b.max(1e-4)).max(0);
-    return vec4(c.mul(multiplier), input.a);
-  });
-
-  // Calibrated against Unity renders; the raw URP intensity is not portable to three's additive mip cascade.
-  const BLOOM_INTENSITY = 0.012;
-  const pipeline = new THREE.RenderPipeline(renderer);
-  // PassNode prioritizes options.samples over renderer.samples, preserving the original 4x MSAA.
-  const scenePass = pass(scene, camera, { samples: 4 });
-  const scenePassColor = scenePass.getTextureNode('output');
-  const bloomNode = bloom(scenePassColor, BLOOM_INTENSITY, 0.7, 1.0);
-  bloomNode.highPassFn = urpPrefilter;
-  pipeline.outputNode = scenePassColor.add(bloomNode);
   await assetsLoaded;
   const clock = new THREE.Clock();
   const syncSun = () => {
     const dir = sun.position.clone().sub(sun.target.position).normalize();
-    (sunDirection.value as THREE.Vector3).copy(dir);
-    (sunColor.value as THREE.Color).copy(sun.color);
+    sunDirection.value.copy(dir);
+    sunColor.value.copy(sun.color);
     // Unity convention (_MainLightColor = color * intensity). Do not pass three's pi multiplier.
     sunIntensity.value = sunUnityIntensity;
   };
   // The sun is static after scene setup, so synchronize its uniforms once.
   syncSun();
 
-  // Reflector targets and similar objects are added during TSL setup in the first pipeline.render(), so after the first render,
-  // finalize and freeze the matrices of the completed scene graph. The camera is outside the scene and continues updating independently.
+  // After the first frame, freeze the static scene graph. The camera stays outside the scene.
   let firstFrameDone = false;
   const perf = state.perf
     ? { count: 0, timestamps: [] as number[], idleFps, activeFps, cam: camId, preset: presetName }
@@ -291,7 +264,8 @@ async function init() {
       for (const body of bodies) body.time.value += dt * (body.u.Flow_Speed.value as number);
     }
     controls?.update();
-    pipeline.render();
+    renderOpaqueGrab(renderer, scene, camera, allWater);
+    renderer.render(scene, camera);
     if (perf) {
       perf.count++;
       perf.timestamps.push(now);

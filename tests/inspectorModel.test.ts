@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { Vector4 } from 'three/webgpu';
+import { Vector4 } from 'three';
 import { createWaterUniforms } from '../src/water/uniforms.ts';
 import {
   ADVANCED_SECTIONS,

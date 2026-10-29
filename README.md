@@ -1,6 +1,6 @@
-# Uber Stylized Water — three.js WebGPU (TSL) Port
+# Uber Stylized Water — three.js WebGL Port
 
-This is a **three.js r185 WebGPU + TSL** port of
+This is a **three.js r185 WebGL** port of
 [Uber Stylized Water](https://github.com/MatrixRex/Uber-Stylized-Water) (MIT / © 2025 MatrixRex),
 a stylized water shader for Unity URP. The demo scene also recreates the Unity version.
 
@@ -61,8 +61,7 @@ whenever `main` is pushed. In the repository settings, select **GitHub Actions**
 **Pages → Build and deployment → Source**. The relative Vite base supports both project Pages
 URLs and custom domains without repository-specific configuration.
 
-The demo targets a current browser with WebGPU support. GitHub Pages provides the secure HTTPS
-context required by WebGPU.
+The demo renders with `WebGLRenderer` and a GLSL water shader. It does not use WebGPU.
 
 ## License
 

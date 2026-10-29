@@ -1,10 +1,7 @@
-// Profiling itself adds overhead, so dynamically import it only when profile=1.
-import type * as THREE from 'three/webgpu';
-import { Inspector } from 'three/addons/inspector/Inspector.js';
+// three's Inspector attaches to WebGPURenderer only. The classic WebGLRenderer has no inspector slot.
+import type * as THREE from 'three';
 
-export function mountProfiler(renderer: THREE.WebGPURenderer): Inspector {
-  const profiler = new Inspector();
-  renderer.inspector = profiler;
-  profiler.init();
-  return profiler;
+export function mountProfiler(_renderer: THREE.WebGLRenderer): null {
+  console.warn('[profiler] WebGLRenderer 没有 three Inspector，profile=1 已跳过');
+  return null;
 }

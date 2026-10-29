@@ -126,8 +126,6 @@ function startSystemGpuSampler() {
 }
 
 const browserArgs = [
-  '--enable-unsafe-webgpu',
-  '--enable-features=WebGPU',
   '--use-angle=metal',
   '--hide-scrollbars',
 ];

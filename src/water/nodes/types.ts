@@ -1,19 +1,19 @@
-import type * as THREE from 'three/webgpu';
+import type * as THREE from 'three';
 import type { WaterUniforms, TextureSlot } from '../uniforms';
 
 export interface WaterCtx {
   u: WaterUniforms;
-  /** App-defined, freezable time in seconds. Do not use TSL's built-in time. */
-  time: any;
-  /** Get a TSL texture node for a slot (presets switch it by replacing .value). */
-  tex: (slot: TextureSlot) => any;
+  /** App-defined, freezable time in seconds. Already scaled by Flow_Speed. */
+  time: { value: number };
+  /** Texture uniform for a slot (presets switch it by replacing .value). */
+  tex: (slot: TextureSlot) => { value: THREE.Texture };
   mesh: THREE.Mesh;
   scene: THREE.Scene;
-  renderer: THREE.WebGPURenderer;
+  renderer: THREE.WebGLRenderer;
   camera: THREE.PerspectiveCamera;
-  sunDirection: any;
-  sunColor: any;
-  sunIntensity: any;
+  sunDirection: { value: THREE.Vector3 };
+  sunColor: { value: THREE.Color };
+  sunIntensity: { value: number };
   /** Scene-specific probe and planar-reflection volume; defaults to the Unity demo scene. */
   reflection?: ReflectionSetup;
 }

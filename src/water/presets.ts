@@ -1,4 +1,4 @@
-import * as THREE from 'three/webgpu';
+import * as THREE from 'three';
 import presetsJson from './presets.json';
 import overridesJson from './plantOverrides.json';
 import { publicAsset } from '../assets.ts';

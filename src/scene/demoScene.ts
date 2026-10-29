@@ -7,21 +7,8 @@
 //   producing the same composition as Unity without a horizontal flip. Unity's built-in Cube/Capsule and the terrain
 //   are symmetric under Z reflection, so their meshes do not need to be rebuilt.
 //   Unity applies Euler angles in Z -> X -> Y order, so three.js uses Euler order 'YXZ' (verified).
-import * as THREE from 'three/webgpu';
+import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
-import {
-  cameraPosition,
-  cameraViewMatrix,
-  mix,
-  normalWorldGeometry,
-  positionWorld,
-  reflect,
-  shadow,
-  texture,
-  uv,
-  vec2,
-  vec3,
-} from 'three/tsl';
 import { publicAsset } from '../assets.ts';
 
 export interface DemoSceneHandles {
@@ -127,27 +114,55 @@ async function buildTerrain(): Promise<THREE.Mesh> {
   const sandCol = loadTex(publicAsset('textures/scene/sand_color.png'), true);
   const sandNrm = loadTex(publicAsset('textures/scene/sand_normal.png'), false);
 
-  // Tile every 4 m. Base UVs on Unity coordinates (x, zu), where zu = -z_three, to match the pattern orientation.
-  const tileUV = vec2(positionWorld.x, positionWorld.z.negate()).mul(1 / 4);
-
-  const w = texture(splat, uv());
-  const wGrass = w.r;
-  const wSand = w.g;
-  const t = wSand.div(wGrass.add(wSand).max(1e-4)).saturate();
-
-  const mat = new THREE.MeshStandardNodeMaterial({ roughness: 1, metalness: 0 });
-  mat.colorNode = mix(texture(grassCol, tileUV).rgb, texture(sandCol, tileUV).rgb, t);
-
-  // Normal maps (Sand strength 0.5). TBN aligned to UV axes u=+X and v=+zu (=-z_three).
-  const nG = texture(grassNrm, tileUV).rgb.mul(2).sub(1);
-  const nSraw = texture(sandNrm, tileUV).rgb.mul(2).sub(1);
-  const nS = vec3(nSraw.xy.mul(0.5), nSraw.z);
-  const nTS = mix(nG, nS, t);
-  const N = normalWorldGeometry;
-  const T = vec3(1, 0, 0).sub(N.mul(N.x)).normalize();
-  const B = N.cross(T);
-  const perturbed = T.mul(nTS.x).add(B.mul(nTS.y)).add(N.mul(nTS.z)).normalize();
-  mat.normalNode = perturbed.transformDirection(cameraViewMatrix);
+  const mat = new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0 });
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.splatMap = { value: splat };
+    shader.uniforms.grassMap = { value: grassCol };
+    shader.uniforms.sandMap = { value: sandCol };
+    shader.uniforms.grassNrm = { value: grassNrm };
+    shader.uniforms.sandNrm = { value: sandNrm };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vTileUV;\nvarying vec2 vSplatUV;')
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        vec4 tileWorld = modelMatrix * vec4(transformed, 1.0);
+        vTileUV = vec2(tileWorld.x, -tileWorld.z) * 0.25;
+        vSplatUV = uv;`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        varying vec2 vTileUV;
+        varying vec2 vSplatUV;
+        uniform sampler2D splatMap;
+        uniform sampler2D grassMap;
+        uniform sampler2D sandMap;
+        uniform sampler2D grassNrm;
+        uniform sampler2D sandNrm;
+        float splatT;`,
+      )
+      .replace(
+        '#include <map_fragment>',
+        `float wG = texture2D(splatMap, vSplatUV).r;
+        float wS = texture2D(splatMap, vSplatUV).g;
+        splatT = clamp(wS / max(wG + wS, 1e-4), 0.0, 1.0);
+        vec4 sampledDiffuseColor = vec4(mix(texture2D(grassMap, vTileUV).rgb, texture2D(sandMap, vTileUV).rgb, splatT), 1.0);
+        diffuseColor *= sampledDiffuseColor;`,
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `vec3 nG = texture2D(grassNrm, vTileUV).xyz * 2.0 - 1.0;
+        vec3 nSraw = texture2D(sandNrm, vTileUV).xyz * 2.0 - 1.0;
+        vec3 nS = vec3(nSraw.xy * 0.5, nSraw.z);
+        vec3 nTS = mix(nG, nS, splatT);
+        vec3 Nw = normalize(transpose(mat3(viewMatrix)) * normalize(normal));
+        vec3 Tw = normalize(vec3(1.0, 0.0, 0.0) - Nw * Nw.x);
+        vec3 Bw = cross(Nw, Tw);
+        normal = normalize(mat3(viewMatrix) * normalize(Tw * nTS.x + Bw * nTS.y + Nw * nTS.z));`,
+      );
+  };
 
   // three defaults FrontSide materials to a BackSide shadow pass. Force FrontSide because the terrain
   // is an open heightfield whose light-facing triangles would otherwise be culled from the shadow map.
@@ -201,33 +216,8 @@ const HUMANS: Array<{ p: [number, number, number]; yaw: number }> = [
 // difference from Unity Smoothness 0.5.
 const PROP_ROUGHNESS = 0.8;
 
-// URP indirect specular "grazingTerm" component (BRDF.hlsl EnvironmentBRDFSpecular).
-//   surfaceReduction * lerp(specular, grazingTerm, Pow4(1 - NoV))
-//     surfaceReduction = 1/(roughness² + 1)          roughness = (1-Smoothness)² = 0.25 → 0.94118
-//     specular         = kDielectricSpec.rgb = 0.04
-//     grazingTerm      = saturate(Smoothness + reflectivity) = 0.5 + 0.04 = 0.54
-// three already provides F0, so add only (grazingTerm - specular) as emissive.
-const GRAZING_GAIN = (1 / (0.25 * 0.25 + 1)) * (0.54 - 0.04); // = 0.47059
-
-// Unity's blurred baked probe reflects terrain below the horizon, not the panorama's ocean. Approximate
-// it with measured upper- and lower-hemisphere averages.
-const PROBE_SKY: [number, number, number] = [0.4236, 0.3927, 0.4317];
-const PROBE_GROUND: [number, number, number] = [0.66, 0.4, 0.15];
-
-function urpGrazingSpecular() {
-  const N = normalWorldGeometry;
-  const I = positionWorld.sub(cameraPosition).normalize(); // Camera -> surface.
-  const noV = N.dot(I.negate()).saturate();
-  const R: any = reflect(I, N);
-  const probe = mix(vec3(...PROBE_GROUND), vec3(...PROBE_SKY), R.y.smoothstep(-0.2, 0.2));
-  return probe.mul(noV.oneMinus().pow(4)).mul(GRAZING_GAIN);
-}
-
 function urpLit(color: THREE.Color) {
-  const mat = new THREE.MeshStandardNodeMaterial({ color, roughness: PROP_ROUGHNESS, metalness: 0 });
-  // Indirect specular is unaffected by shadows, so adding it as emissive matches URP's ordering.
-  mat.emissiveNode = urpGrazingSpecular();
-  return mat;
+  return new THREE.MeshStandardMaterial({ color, roughness: PROP_ROUGHNESS, metalness: 0 });
 }
 
 function buildProps(scene: THREE.Scene) {
@@ -315,8 +305,6 @@ export async function buildDemoScene(scene: THREE.Scene): Promise<DemoSceneHandl
   sun.shadow.camera.far = 320;
   sun.shadow.bias = -0.000001;
   sun.shadow.normalBias = 0.08;
-  // Sharing one ShadowNode lets NodeFrame deduplicate redraws by renderId.
-  (sun.shadow as any).shadowNode = shadow(sun);
   sun.shadow.autoUpdate = false; // The scene is static; bake only once at startup.
   sun.shadow.needsUpdate = true;
   scene.add(sun);

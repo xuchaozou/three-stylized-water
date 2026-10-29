@@ -1,4 +1,4 @@
-import { Vector2, Vector3, Vector4 } from 'three/webgpu';
+import { Vector2, Vector3, Vector4 } from 'three';
 import type { WaterUniforms } from '../water/uniforms';
 import { fromColorControl, hexToRgb, rgbToHex, toColorControl } from './colorControl.ts';
 

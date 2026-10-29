@@ -1,7 +1,6 @@
-import * as THREE from 'three/webgpu';
+import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
-import { shadow, vec4 } from 'three/tsl';
+import { Sky } from 'three/addons/objects/Sky.js';
 import { publicAsset } from '../assets.ts';
 import type { ReflectionSetup } from '../water/nodes/types';
 
@@ -9,10 +8,7 @@ export const PLANT_MODEL_URL = publicAsset('models/清水池_3.glb');
 export const WATER_GROUP_NAME = 'water_group';
 /** Reflector and probe cameras only see layer 0, so labels on this layer stay out of the water. */
 export const LABEL_LAYER = 1;
-/**
- * Water must not render inside another pool's reflector: its material binds the main pass's multisampled
- * depth texture, which fails WebGPU validation in the single-sampled reflection target.
- */
+/** Reflector cameras stay on layer 0, so one pool's water is not drawn into another's reflection. */
 export const WATER_LAYER = 2;
 
 export interface PoolDef {
@@ -216,22 +212,23 @@ const SKY_MAX = 2000;
 const CONCRETE_TINT = new THREE.Color().setRGB(0.62, 0.62, 0.6, THREE.SRGBColorSpace);
 
 /** Preetham sky as background; its PMREM bake drives the walls' ambient light and the water's probe fallback. */
-function buildSky(scene: THREE.Scene, renderer: THREE.WebGPURenderer, sunDir: THREE.Vector3) {
-  const sky = new SkyMesh();
+function buildSky(scene: THREE.Scene, renderer: THREE.WebGLRenderer, sunDir: THREE.Vector3) {
+  const sky = new Sky();
   sky.name = 'Sky';
   sky.scale.setScalar(900);
-  sky.turbidity.value = 4;
-  sky.rayleigh.value = 1.2;
-  sky.mieCoefficient.value = 0.004;
-  sky.mieDirectionalG.value = 0.85;
-  sky.cloudCoverage.value = 0.35;
-  sky.cloudDensity.value = 0.5;
-  (sky.sunPosition.value as THREE.Vector3).copy(sunDir).negate();
-  const skyMat = sky.material as THREE.NodeMaterial;
-  // The sun disc reaches ~1e7, which overflows half-float targets to Inf; mix() then turns it into NaN
-  // and bloom spreads it across the frame. Clamp well below the half-float limit.
-  const skyColor: any = skyMat.colorNode;
-  skyMat.colorNode = vec4(skyColor.rgb.mul(SKY_GAIN).min(SKY_MAX), 1);
+  const skyMat = sky.material as THREE.ShaderMaterial;
+  skyMat.uniforms.turbidity.value = 4;
+  skyMat.uniforms.rayleigh.value = 1.2;
+  skyMat.uniforms.mieCoefficient.value = 0.004;
+  skyMat.uniforms.mieDirectionalG.value = 0.85;
+  skyMat.uniforms.cloudCoverage.value = 0.35;
+  skyMat.uniforms.cloudDensity.value = 0.5;
+  skyMat.uniforms.sunPosition.value.copy(sunDir).negate();
+  // The sun disc reaches ~1e7, which overflows half-float targets. Clamp before tone mapping.
+  skyMat.fragmentShader = skyMat.fragmentShader.replace(
+    'gl_FragColor = vec4( texColor, 1.0 );',
+    `gl_FragColor = vec4( min( texColor * ${SKY_GAIN}, vec3( ${SKY_MAX}.0 ) ), 1.0 );`,
+  );
   skyMat.fog = false;
   sky.frustumCulled = false;
   scene.add(sky);
@@ -245,7 +242,7 @@ function buildSky(scene: THREE.Scene, renderer: THREE.WebGPURenderer, sunDir: TH
 
 export async function buildPlantScene(
   scene: THREE.Scene,
-  renderer: THREE.WebGPURenderer,
+  renderer: THREE.WebGLRenderer,
 ): Promise<PlantSceneHandles> {
   const texLoader = new THREE.TextureLoader();
   const sunDir = new THREE.Vector3(0.55, -0.62, -0.56).normalize();
@@ -265,7 +262,6 @@ export async function buildPlantScene(
   sun.shadow.camera.far = 260;
   sun.shadow.bias = -0.0002;
   sun.shadow.normalBias = 0.05;
-  (sun.shadow as any).shadowNode = shadow(sun);
   sun.shadow.autoUpdate = false;
   sun.shadow.needsUpdate = true;
   scene.add(sun);

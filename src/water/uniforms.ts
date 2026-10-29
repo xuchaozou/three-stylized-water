@@ -1,7 +1,6 @@
 // Uniform definitions that mirror every property in Unity's UberStylizedWater.shader 1:1.
 // Key names omit the leading "_" from Unity property names to preserve the presets.json mapping.
-import * as THREE from 'three/webgpu';
-import { uniform } from 'three/tsl';
+import * as THREE from 'three';
 import { publicAsset } from '../assets.ts';
 
 export type WaterUniforms = ReturnType<typeof createWaterUniforms>;
@@ -22,13 +21,13 @@ export function gammaColorToLinear(r: number, g: number, b: number, a: number) {
   return [srgbToLinear(r), srgbToLinear(g), srgbToLinear(b), a] as const;
 }
 
-const v2 = (x: number, y: number) => uniform(new THREE.Vector2(x, y));
-const v3 = (x: number, y: number, z: number) => uniform(new THREE.Vector3(x, y, z));
-const v4 = (x: number, y: number, z: number, w: number) => uniform(new THREE.Vector4(x, y, z, w));
+const v2 = (x: number, y: number) => ({ value: new THREE.Vector2(x, y) });
+const v3 = (x: number, y: number, z: number) => ({ value: new THREE.Vector3(x, y, z) });
+const v4 = (x: number, y: number, z: number, w: number) => ({ value: new THREE.Vector4(x, y, z, w) });
 /** For non-HDR Color properties: convert shader defaults from gamma to linear uniforms. */
 const c4 = (x: number, y: number, z: number, w: number) =>
-  uniform(new THREE.Vector4(...gammaColorToLinear(x, y, z, w)));
-const f = (x: number) => uniform(x);
+  ({ value: new THREE.Vector4(...gammaColorToLinear(x, y, z, w)) });
+const f = (x: number) => ({ value: x });
 
 export function createWaterUniforms() {
   return {
