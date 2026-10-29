@@ -44,12 +44,22 @@ function gerstnerWave(len: any, height: any, speed: any, dir: any, sharp: any, P
   return { displacement, normal };
 }
 
+/** Rotate a Unity-space direction by Flow_Direction in the (x, z_unity) plane, matching flowRotate's frame. */
+function flowDirection(ctx: WaterCtx, dir: any) {
+  const a = ctx.u.Flow_Direction.mul(Math.PI / 180);
+  const c = a.cos();
+  const s = a.sin();
+  return vec3(dir.x.mul(c).sub(dir.z.mul(s)), dir.y, dir.x.mul(s).add(dir.z.mul(c)));
+}
+
 export function buildWaves(ctx: WaterCtx): WavesData {
   const { u, time } = ctx;
+  const dir1 = flowDirection(ctx, u.Wave1_Direction);
+  const dir2 = flowDirection(ctx, u.Wave2_Direction);
   const wave1 = (P: any) =>
-    gerstnerWave(u.Wave1_Length, u.Wave1_Height, u.Wave1_Speed, u.Wave1_Direction, u.Wave1_Sharpness, P, time);
+    gerstnerWave(u.Wave1_Length, u.Wave1_Height, u.Wave1_Speed, dir1, u.Wave1_Sharpness, P, time);
   const wave2 = (P: any) =>
-    gerstnerWave(u.Wave2_Length, u.Wave2_Height, u.Wave2_Speed, u.Wave2_Direction, u.Wave2_Sharpness, P, time);
+    gerstnerWave(u.Wave2_Length, u.Wave2_Height, u.Wave2_Speed, dir2, u.Wave2_Sharpness, P, time);
 
   const posWSUndisplaced = modelWorldMatrix.mul(vec4(positionGeometry, 1)).xyz;
 

@@ -15,7 +15,7 @@ import {
   vec2,
   vec3,
 } from 'three/tsl';
-import type { WaterCtx } from './types';
+import type { ReflectionSetup, WaterCtx } from './types';
 import { buildWaves } from './waves';
 import { buildNormalTS } from './normals';
 
@@ -46,11 +46,19 @@ const PROBE_RESOLUTION = 256;
 const BOX_MIN: [number, number, number] = [-4.8711, 15.6098, -105.1152];
 const BOX_MAX: [number, number, number] = [106.3541, 52.2922, -1.3640];
 
+const DEMO_REFLECTION: ReflectionSetup = {
+  volumeCenter: VOLUME_CENTER,
+  volumeHalf: VOLUME_HALF,
+  probePosition: PROBE_POSITION,
+  boxMin: BOX_MIN,
+  boxMax: BOX_MAX,
+};
+
 /** Bake the cubemap after the first render so asynchronously loaded terrain textures are present. */
-function createProbeTarget(ctx: WaterCtx): THREE.CubeRenderTarget {
+function createProbeTarget(ctx: WaterCtx, setup: ReflectionSetup): THREE.CubeRenderTarget {
   const rt = new THREE.CubeRenderTarget(PROBE_RESOLUTION, { type: THREE.HalfFloatType });
   const cam = new THREE.CubeCamera(0.3, 1000, rt);
-  cam.position.set(...PROBE_POSITION);
+  cam.position.set(...setup.probePosition);
 
   const capture = () => {
     const visible = ctx.mesh.visible;
@@ -66,18 +74,25 @@ function createProbeTarget(ctx: WaterCtx): THREE.CubeRenderTarget {
 }
 
 /** Port the probe's scalar-x normal perturbation without normalization; roughness zero selects mip 0. */
-function buildProbeColor(ctx: WaterCtx, Ngeo: any, nTS: any, V: any, envCube: THREE.CubeTexture): any {
+function buildProbeColor(
+  ctx: WaterCtx,
+  setup: ReflectionSetup,
+  Ngeo: any,
+  nTS: any,
+  V: any,
+  envCube: THREE.CubeTexture,
+): any {
   const nmx = nTS.x.mul(ctx.u.Reflection_Distortion);
   const perturbedN = Ngeo.add(vec3(nmx));
   const r: any = reflect(V.negate(), perturbedN);
 
   // Box projection redirects the ray from the probe to its intersection with the probe bounds.
   const positive: any = r.step(vec3(0)); // 1 per component where r>=0
-  const bounds: any = mix(vec3(...BOX_MIN), vec3(...BOX_MAX), positive);
+  const bounds: any = mix(vec3(...setup.boxMin), vec3(...setup.boxMax), positive);
   const denom: any = r.abs().max(1e-4).mul(mix(vec3(-1), vec3(1), positive));
   const t: any = bounds.sub(positionWorld).div(denom);
   const fa: any = t.x.min(t.y).min(t.z);
-  const boxDir: any = positionWorld.sub(vec3(...PROBE_POSITION)).add(r.mul(fa));
+  const boxDir: any = positionWorld.sub(vec3(...setup.probePosition)).add(r.mul(fa));
 
   // CubeTextureNode applies materialEnvRotation; cancel it because this capture is already world-space.
   const yaw = ctx.scene.environment === null ? 0 : ctx.scene.environmentRotation.y;
@@ -106,6 +121,7 @@ export function buildReflection(ctx: WaterCtx, _waterNormal: any): ReflectionDat
 
 function build(ctx: WaterCtx): ReflectionData {
   const { u } = ctx;
+  const setup = ctx.reflection ?? DEMO_REFLECTION;
 
   const nTS = buildNormalTS(ctx);
 
@@ -115,12 +131,24 @@ function build(ctx: WaterCtx): ReflectionData {
 
   // Reflector targets +Z by default; rotate it onto the XZ water plane.
   const refl: any = reflector({
-    resolutionScale: RT_RESOLUTION_SCALE,
+    resolutionScale: setup.resolutionScale ?? RT_RESOLUTION_SCALE,
     bounces: false,
     generateMipmaps: false,
   });
   refl.target.rotateX(-Math.PI / 2);
   ctx.mesh.add(refl.target);
+
+  // The virtual camera is a clone of the view camera and would inherit its extra layers (labels, other
+  // water bodies). Water materials bind the main pass's MSAA depth and are invalid in this 1x target.
+  {
+    const baseNode: any = refl.reflector;
+    const getVirtualCamera = baseNode.getVirtualCamera.bind(baseNode);
+    baseNode.getVirtualCamera = (camera: THREE.Camera) => {
+      const vc = getVirtualCamera(camera);
+      vc.layers.set(0);
+      return vc;
+    };
+  }
 
   // Reuse the planar RT only when it has valid output and all render-affecting state is unchanged.
   // target.matrixWorld must be keyed because it is still identity during the first render.
@@ -165,8 +193,8 @@ function build(ctx: WaterCtx): ReflectionData {
   refl.uvNode = screenUV.flipX().add(vec2(off.x.negate(), off.y));
   const planar = nodeObject(refl).rgb;
 
-  const probe = buildProbeColor(ctx, Ngeo, nTS, V, createProbeTarget(ctx).texture);
-  const outside = cameraPosition.sub(vec3(...VOLUME_CENTER)).abs().sub(vec3(...VOLUME_HALF)).max(0);
+  const probe = buildProbeColor(ctx, setup, Ngeo, nTS, V, createProbeTarget(ctx, setup).texture);
+  const outside = cameraPosition.sub(vec3(...setup.volumeCenter)).abs().sub(vec3(...setup.volumeHalf)).max(0);
   const volumeBlend = saturate(outside.x.max(outside.y).max(outside.z).div(BLEND_DISTANCE));
   const blend = mix(float(1), volumeBlend, u.ENABLEPLANERREFLECTION);
   const color = mix(planar, probe, blend);

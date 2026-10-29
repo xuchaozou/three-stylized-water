@@ -61,3 +61,21 @@ export const CAMS: Record<string, CamPose> = {
 };
 
 export const DEFAULT_CAM = 'main';
+
+const plantCam = (
+  pos: [number, number, number],
+  target: [number, number, number],
+  fov = 55,
+): CamPose => ({ pos, target, up: [0, 1, 0], fov, near: 0.3, far: 1000 });
+
+/** Water-plant scene: sewage pool at z=-14.5, clear-water pool at z=+14.5, water level at y≈8. */
+export const PLANT_CAMS: Record<string, CamPose> = {
+  overview: plantCam([-46, 30, 30], [0, 6, 0]),
+  sewage: plantCam([-20, 13.5, -21], [-4, 7.8, -13]),
+  clear: plantCam([-20, 13.5, 21], [-4, 7.8, 13]),
+  grazing: plantCam([-20.5, 10.6, 14.5], [12, 7.6, 14.5], 60),
+  clearClose: plantCam([-12, 10, 18], [-2, 7.9, 15.5], 50),
+  top: plantCam([0, 75, 0.01], [0, 0, 0]),
+};
+
+export const DEFAULT_PLANT_CAM = 'overview';

@@ -3,6 +3,7 @@ import presetsJson from './presets.json';
 import { publicAsset } from '../assets.ts';
 import { unityPropToKey, TEXTURE_SLOTS, HDR_COLOR_KEYS, gammaColorToLinear } from './uniforms';
 import type { WaterUniforms, TextureSlot } from './uniforms';
+import { buildPlantPresets, PLANT_PRESET_NAMES } from './plantStyles.ts';
 
 export interface PresetsFile {
   _demoDefault?: string;
@@ -15,8 +16,13 @@ export interface PresetsFile {
   }>;
 }
 
-export const PRESETS: PresetsFile = presetsJson as any;
-export const PRESET_NAMES = Object.keys(PRESETS.presets ?? {});
+const UNITY_PRESETS: PresetsFile = presetsJson as any;
+export const PRESETS: PresetsFile = {
+  ...UNITY_PRESETS,
+  presets: { ...UNITY_PRESETS.presets, ...buildPlantPresets(UNITY_PRESETS.presets ?? {}) },
+};
+export const PRESET_NAMES = Object.keys(UNITY_PRESETS.presets ?? {});
+export { PLANT_PRESET_NAMES };
 export const DEFAULT_PRESET = PRESETS._demoDefault && PRESETS.presets[PRESETS._demoDefault]
   ? PRESETS._demoDefault
   : (PRESET_NAMES[0] ?? '');
@@ -40,6 +46,14 @@ const TEX_URL: Record<string, string> = {
   'Normal 3.png': publicAsset('textures/water/normal3.png'),
 };
 
+const EXTENSION_DEFAULTS: Record<string, number> = {
+  Refraction_Physical: 0,
+  Refraction_Thickness: 1.5,
+  Flow_Speed: 1,
+  Normal_CrossAngle: 0,
+  Flow_Aligned: 0,
+};
+
 export function applyPreset(
   u: WaterUniforms,
   setTexture: (slot: TextureSlot, url: string) => void,
@@ -47,6 +61,13 @@ export function applyPreset(
 ) {
   const p = PRESETS.presets?.[name];
   if (!p) return false;
+
+  // Unity presets predate the extension uniforms; reset them so a Unity preset renders as authored.
+  // Flow_Direction is left alone because it describes the site, not the water type.
+  for (const [key, value] of Object.entries(EXTENSION_DEFAULTS)) {
+    const un = (u as any)[key];
+    if (un) un.value = value;
+  }
 
   for (const [prop, value] of Object.entries(p.floats ?? {})) {
     const key = unityPropToKey(prop);

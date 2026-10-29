@@ -1,6 +1,6 @@
 import { float, mix } from 'three/tsl';
 import type { WaterCtx, DepthData } from './types';
-import { smoothMask, surfDistortValue, uvPannerDistorted, worldUV } from './utils';
+import { flowRotate, smoothMask, surfDistortValue, uvPannerDistorted, worldUV } from './utils';
 
 export interface IntersectionData {
   /** 0..1 mask with the _Enable_Intersection gate applied. Composition uses u.InterSec_Color. */
@@ -42,7 +42,7 @@ export function intersectionFoamMask(
   const band = smoothMask(edge, g, waterDepth);
 
   const foamUV = uvPannerDistorted(
-    baseUV,
+    flowRotate(ctx, baseUV),
     u.InterSec_Foam_Tile,
     u.InterSec_Foam_Scale,
     u.InterSec_Foam_Pan,

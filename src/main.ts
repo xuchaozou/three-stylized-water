@@ -5,12 +5,24 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { FramePacer } from './rendering/FramePacer';
 import { selectPixelRatio } from './rendering/renderResolution';
 import { buildDemoScene } from './scene/demoScene';
-import { CAMS, DEFAULT_CAM } from './scene/cams';
+import { buildPlantScene, LABEL_LAYER, PLANT_TONE_MAPPING_EXPOSURE, WATER_LAYER } from './scene/plantScene';
+import { CAMS, DEFAULT_CAM, DEFAULT_PLANT_CAM, PLANT_CAMS } from './scene/cams';
 import { createWaterUniforms } from './water/uniforms';
+import type { WaterUniforms } from './water/uniforms';
 import { buildWaterMaterial, createTextureRegistry } from './water/WaterMaterial';
-import { applyPreset, PRESET_NAMES, DEFAULT_PRESET } from './water/presets';
+import { applyPreset, PRESET_NAMES, PLANT_PRESET_NAMES, DEFAULT_PRESET } from './water/presets';
+import { applyColorPalette, COLOR_PALETTE_NAMES, PLANT_WATER_TYPES } from './water/plantStyles';
 import { parseUrlState } from './ui/urlState';
-import type { WaterCtx } from './water/nodes/types';
+import type { ReflectionSetup, WaterCtx } from './water/nodes/types';
+
+interface WaterBody {
+  name: string;
+  u: WaterUniforms;
+  texReg: ReturnType<typeof createTextureRegistry>;
+  preset: string;
+  /** Integrated per body so changing Flow_Speed never makes the animation phase jump. */
+  time: { value: number };
+}
 
 const state = parseUrlState();
 const idleFps = state.fps ?? 30;
@@ -51,12 +63,13 @@ async function init() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(65, width / height, 0.3, 1000);
-
-  let camId = state.cam && CAMS[state.cam] ? state.cam : DEFAULT_CAM;
-  const controls = new OrbitControls(camera, renderer.domElement);
-  const applyCam = (id: string) => {
+  const isPlant = state.scene === 'plant';
+  const cams = isPlant ? PLANT_CAMS : CAMS;
+  const defaultCam = isPlant ? DEFAULT_PLANT_CAM : DEFAULT_CAM;
+  let camId = state.cam && cams[state.cam] ? state.cam : defaultCam;
+  const controls = new OrbitControls(camera, renderer.domElement);  const applyCam = (id: string) => {
     camId = id;
-    const c = CAMS[id] ?? CAMS[DEFAULT_CAM];
+    const c = cams[id] ?? cams[defaultCam];
     camera.position.set(...c.pos);
     camera.up.set(...c.up);
     camera.fov = c.fov;
@@ -71,73 +84,120 @@ async function init() {
   controls.addEventListener('change', () => framePacer.noteActivity(performance.now()));
   applyCam(camId);
 
-  const handles = await buildDemoScene(scene);
-
-  const u = createWaterUniforms();
-  const texReg = createTextureRegistry();
-  const uTime = uniform(state.t);
   const sunDirection = uniform(new THREE.Vector3(0, 1, 0));
   const sunColor = uniform(new THREE.Color(1, 1, 1));
   const sunIntensity = uniform(1);
 
-  // Unity's 20 m plane scaled by 3.5 gives 70 m; Gerstner displacement needs dense subdivision.
-  const waterGeo = new THREE.PlaneGeometry(70, 70, 256, 256);
-  waterGeo.rotateX(-Math.PI / 2);
-  const waterMesh = new THREE.Mesh(waterGeo);
-  waterMesh.name = 'Water';
-  waterMesh.frustumCulled = false;
-  waterMesh.castShadow = false;
-  waterMesh.receiveShadow = false;
-  handles.waterAnchor.add(waterMesh);
-
-  const ctx: WaterCtx = {
-    u,
-    time: uTime,
-    tex: texReg.get,
-    mesh: waterMesh,
-    scene,
-    renderer,
-    camera,
-    sunDirection,
-    sunColor,
-    sunIntensity,
+  const presetNames = isPlant ? [...PLANT_PRESET_NAMES, ...PRESET_NAMES] : PRESET_NAMES;
+  const bodies: WaterBody[] = [];
+  /** One uniform set per water body; every mesh of that body gets its own material (reflector per mesh). */
+  const addWaterBody = (name: string, meshes: THREE.Mesh[], preset: string, reflection?: ReflectionSetup) => {
+    const body: WaterBody = {
+      name,
+      u: createWaterUniforms(),
+      texReg: createTextureRegistry(),
+      preset,
+      time: uniform(state.t),
+    };
+    for (const mesh of meshes) {
+      const ctx: WaterCtx = {
+        u: body.u,
+        time: body.time,
+        tex: body.texReg.get,
+        mesh,
+        scene,
+        renderer,
+        camera,
+        sunDirection,
+        sunColor,
+        sunIntensity,
+        reflection,
+      };
+      mesh.material = buildWaterMaterial(ctx);
+    }
+    if (preset) applyPreset(body.u, body.texReg.set, preset);
+    bodies.push(body);
   };
-  waterMesh.material = buildWaterMaterial(ctx);
 
-  let presetName = state.preset && PRESET_NAMES.includes(state.preset) ? state.preset : DEFAULT_PRESET;
-  if (presetName) applyPreset(u, texReg.set, presetName);
+  let sun: THREE.DirectionalLight;
+  let sunUnityIntensity: number;
+  if (isPlant) {
+    camera.layers.enable(LABEL_LAYER);
+    camera.layers.enable(WATER_LAYER);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = PLANT_TONE_MAPPING_EXPOSURE;
+    const handles = await buildPlantScene(scene, renderer);
+    ({ sun, sunUnityIntensity } = handles);
+    for (const pool of handles.pools) {
+      const preset = state.preset && presetNames.includes(state.preset) ? state.preset : pool.def.preset;
+      addWaterBody(pool.def.name, pool.waterMeshes, preset, pool.reflection);
+      bodies[bodies.length - 1].u.Flow_Direction.value = pool.def.flowDirection;
+    }
+  } else {
+    const handles = await buildDemoScene(scene);
+    ({ sun, sunUnityIntensity } = handles);
+    // Unity's 20 m plane scaled by 3.5 gives 70 m; Gerstner displacement needs dense subdivision.
+    const waterGeo = new THREE.PlaneGeometry(70, 70, 256, 256);
+    waterGeo.rotateX(-Math.PI / 2);
+    const waterMesh = new THREE.Mesh(waterGeo);
+    waterMesh.name = 'Water';
+    waterMesh.frustumCulled = false;
+    waterMesh.castShadow = false;
+    waterMesh.receiveShadow = false;
+    handles.waterAnchor.add(waterMesh);
+    const preset = state.preset && PRESET_NAMES.includes(state.preset) ? state.preset : DEFAULT_PRESET;
+    addWaterBody('Water', [waterMesh], preset);
+  }
 
-  for (const key of state.on) {
-    const un = (u as any)[key];
-    if (un) un.value = 1;
-  }
-  for (const key of state.off) {
-    const un = (u as any)[key];
-    if (un) un.value = 0;
-  }
-  for (const [key, value] of state.set) {
-    const un = (u as any)[key];
-    if (un && Number.isFinite(value)) un.value = value;
+  for (const { u } of bodies) {
+    for (const key of state.on) {
+      const un = (u as any)[key];
+      if (un) un.value = 1;
+    }
+    for (const key of state.off) {
+      const un = (u as any)[key];
+      if (un) un.value = 0;
+    }
+    for (const [key, value] of state.set) {
+      const un = (u as any)[key];
+      if (un && Number.isFinite(value)) un.value = value;
+    }
   }
 
   const guiState = { freeze: state.freeze };
   if (state.hud) {
     const { mountInspector } = await import('./ui/inspector');
-    mountInspector(u, {
-      presetNames: PRESET_NAMES.length ? PRESET_NAMES : ['(waiting for presets)'],
-      currentPreset: presetName || '(waiting for presets)',
-      onPreset: (name) => {
-        presetName = name;
-        applyPreset(u, texReg.set, name);
-        framePacer.forceNextFrame();
-      },
-      camNames: Object.keys(CAMS),
-      currentCam: camId,
-      onCam: applyCam,
-      onInteraction: () => framePacer.noteActivity(performance.now()),
-      state: guiState,
-    });
+    let inspector: { dispose: () => void } | null = null;
+    const mountFor = (body: WaterBody) => {
+      inspector?.dispose();
+      inspector = mountInspector(body.u, {
+        presetNames: presetNames.length ? presetNames : ['(waiting for presets)'],
+        currentPreset: body.preset || '(waiting for presets)',
+        onPreset: (name) => {
+          body.preset = name;
+          applyPreset(body.u, body.texReg.set, name);
+          framePacer.forceNextFrame();
+        },
+        camNames: Object.keys(cams),
+        currentCam: camId,
+        onCam: applyCam,
+        onInteraction: () => framePacer.noteActivity(performance.now()),
+        state: guiState,
+        targetNames: bodies.length > 1 ? bodies.map((b) => b.name) : undefined,
+        currentTarget: body.name,
+        // Defer so lil-gui finishes its change handler before the GUI is destroyed.
+        onTarget: (name) => setTimeout(() => mountFor(bodies.find((b) => b.name === name) ?? body)),
+        presetNotes: Object.fromEntries(Object.entries(PLANT_WATER_TYPES).map(([k, v]) => [k, v.note])),
+        paletteNames: COLOR_PALETTE_NAMES,
+        onPalette: (name) => {
+          applyColorPalette(body.u, name);
+          framePacer.forceNextFrame();
+        },
+      });
+    };
+    mountFor(bodies[0]);
   }
+  const presetName = bodies[0]?.preset ?? '';
   if (state.profile) {
     const { mountProfiler } = await import('./ui/profiler');
     mountProfiler(renderer);
@@ -167,15 +227,14 @@ async function init() {
   const bloomNode = bloom(scenePassColor, BLOOM_INTENSITY, 0.7, 1.0);
   bloomNode.highPassFn = urpPrefilter;
   pipeline.outputNode = scenePassColor.add(bloomNode);
-
   await assetsLoaded;
   const clock = new THREE.Clock();
   const syncSun = () => {
-    const dir = handles.sun.position.clone().sub(handles.sun.target.position).normalize();
+    const dir = sun.position.clone().sub(sun.target.position).normalize();
     (sunDirection.value as THREE.Vector3).copy(dir);
-    (sunColor.value as THREE.Color).copy(handles.sun.color);
+    (sunColor.value as THREE.Color).copy(sun.color);
     // Unity convention (_MainLightColor = color * intensity). Do not pass three's pi multiplier.
-    sunIntensity.value = handles.sunUnityIntensity;
+    sunIntensity.value = sunUnityIntensity;
   };
   // The sun is static after scene setup, so synchronize its uniforms once.
   syncSun();
@@ -192,7 +251,9 @@ async function init() {
     if (!framePacer.shouldRender(now)) return;
 
     const dt = Math.min(clock.getDelta(), 0.1);
-    if (!guiState.freeze) uTime.value += dt;
+    if (!guiState.freeze) {
+      for (const body of bodies) body.time.value += dt * (body.u.Flow_Speed.value as number);
+    }
     controls?.update();
     pipeline.render();
     if (perf) {

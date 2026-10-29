@@ -1,5 +1,5 @@
 import { cameraPosition, cross, dFdx, dFdy, float, mix, positionWorld, saturate, vec2, vec3 } from 'three/tsl';
-import { worldUV } from './utils';
+import { flowRotate, flowUnrotate, worldUV } from './utils';
 import type { WaterCtx, WavesData } from './types';
 
 // Sampling uses Unity-projected world UVs (three Z is flipped), while the source mesh's Mikktspace
@@ -22,14 +22,27 @@ export function buildUnscaledNormalMapSample(ctx: WaterCtx) {
 function buildUnscaledNormalMapSampleImpl(ctx: WaterCtx) {
   const { u } = ctx;
   const t = float(ctx.time);
-  const uvBase = worldUV();
+  const uvBase = flowRotate(ctx, worldUV());
 
-  const uvA = uvBase.mul(u.Normal_Scale.mul(0.5)).add(vec2(u.Normal_Pan.mul(-0.05).mul(t)));
-  const uvB = uvBase.mul(u.Normal_Scale).add(vec2(u.Normal_Pan.mul(0.1).mul(t)));
+  // Unity pans both layers along the same diagonal in opposite directions, which reads as one sliding
+  // sheet. Normal_CrossAngle turns layer B so the two ripple trains interfere and shimmer instead.
+  const cross = u.Normal_CrossAngle.mul(Math.PI / 180);
+  const c = cross.cos();
+  const s = cross.sin();
+  const pan = u.Normal_Pan.mul(t);
+  const panAUnity = vec2(pan.mul(-0.05));
+  const panBUnity = vec2(c.sub(s), s.add(c)).mul(pan.mul(0.1));
+  // Flow-aligned: both layers move downstream, B slightly faster and turned by the cross angle.
+  const panAFlow = vec2(pan.mul(-0.05), 0);
+  const panBFlow = vec2(c, s).mul(pan.mul(-0.13));
+  const uvA = uvBase.mul(u.Normal_Scale.mul(0.5)).add(mix(panAUnity, panAFlow, u.Flow_Aligned));
+  const uvB = uvBase.mul(u.Normal_Scale).add(mix(panBUnity, panBFlow, u.Flow_Aligned));
 
   const nA = sampleNormalMap(ctx, uvA);
   const nB = sampleNormalMap(ctx, uvB);
-  return mix(nA, nB, 0.5) as any; // The source uses an unnormalized average, not whiteout or UDN blending.
+  const n: any = mix(nA, nB, 0.5); // The source uses an unnormalized average, not whiteout or UDN blending.
+  // Tangent xy were sampled in the flow frame; bring them back to the worldUV frame.
+  return vec3(flowUnrotate(ctx, n.xy), n.z) as any;
 }
 
 // These GT-calibrated limits preserve ripple detail after hardware anisotropy reaches its cap.

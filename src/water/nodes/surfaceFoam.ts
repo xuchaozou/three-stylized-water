@@ -3,6 +3,7 @@ import type { WaterCtx, DepthData } from './types';
 import { intersectionFoamMask, sharedSurfDistortValue } from './intersection';
 import {
   distanceFromCamera,
+  flowRotate,
   paralaxUV,
   smoothMask,
   uvPannerDistorted,
@@ -23,7 +24,7 @@ export interface UnderwaterLayerData {
 function surfFoamMaskAt(ctx: WaterCtx, baseUV: any, scale: any, distValue: any): any {
   const { u } = ctx;
   const uv = uvPannerDistorted(
-    baseUV,
+    flowRotate(ctx, baseUV),
     u.SurfFoam_Tile,
     scale,
     u.SurfFoam_Pan,

@@ -1,7 +1,7 @@
 // The dissolve mask is linear data. The -0.5 thickness remap and smoothness 1 are HLSL constants.
 import { float, mix, positionWorld } from 'three/tsl';
 import type { WaterCtx, DepthData } from './types';
-import { smoothMask, uvPanner, worldUV } from './utils';
+import { flowRotate, smoothMask, uvPanner, worldUV } from './utils';
 
 export interface ShorelineData {
   /** 0..1 mask with _ENABLESHORELINE applied. Composition uses u.SL_Color. */
@@ -30,7 +30,7 @@ export function buildShoreline(ctx: WaterCtx, depthS: DepthData): ShorelineData 
   const lines = mix(smA.min(smB), dirBand, u.SL_EnableTrail);
 
   // worldUV corrects Unity's Z axis; sample the dissolve mask without color-space conversion.
-  const dUV = uvPanner(worldUV(), u.SL_MaskPan, u.SL_MaskTile, u.SL_MaskScale, t);
+  const dUV = uvPanner(flowRotate(ctx, worldUV()), u.SL_MaskPan, u.SL_MaskTile, u.SL_MaskScale, t);
   const dTex = ctx.tex('SL_Dissolve_Mask').sample(dUV).r;
   const dissolved = lines.mul(dTex.mul(u.SL_Dissolve).oneMinus());
 

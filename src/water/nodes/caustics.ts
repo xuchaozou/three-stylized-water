@@ -2,7 +2,7 @@
 // The numeric factors below come from the compiled HLSL and are part of the port contract.
 import { cameraPosition, float, positionWorld, vec2, vec3 } from 'three/tsl';
 import type { WaterCtx, DepthData } from './types';
-import { paralaxUV, uvPanner, worldUV } from './utils';
+import { flowRotate, paralaxUV, uvPanner, worldUV } from './utils';
 
 export interface CausticsData {
   /** mask for colorLayerAlpha(base, vec4(4,4,4,1), mask), equal to the final caustics.r. */
@@ -17,7 +17,7 @@ export function buildCaustics(ctx: WaterCtx, depthS: DepthData): CausticsData {
   const paralaxDepth = shallowMask.oneMinus().mul(u.Caustics_Depth);
 
   // Uses the mesh's Mikktspace basis through paralaxUV; see viewDirTS in utils.ts.
-  const pUV = paralaxUV(worldUV(positionWorld), paralaxDepth);
+  const pUV = flowRotate(ctx, paralaxUV(worldUV(positionWorld), paralaxDepth));
 
   const dUV = uvPanner(
     pUV,

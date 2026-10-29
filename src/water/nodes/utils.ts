@@ -11,6 +11,30 @@ export function worldUV(posWS: any = positionWorld) {
   return vec2(posWS.x, posWS.z.negate()).mul(0.1);
 }
 
+/** Flow_Direction in radians. */
+function flowAngle(ctx: WaterCtx) {
+  return ctx.u.Flow_Direction.mul(Math.PI / 180);
+}
+
+/**
+ * Express a worldUV in the flow frame (rotate by -Flow_Direction). Panning along +x of this frame
+ * moves the pattern along Flow_Direction. Apply it after any parallax offset, which is world-aligned.
+ */
+export function flowRotate(ctx: WaterCtx, uv: any) {
+  const a = flowAngle(ctx);
+  const c = a.cos();
+  const s = a.sin();
+  return vec2(uv.x.mul(c).add(uv.y.mul(s)), uv.y.mul(c).sub(uv.x.mul(s)));
+}
+
+/** Rotate a vector from the flow frame back to the worldUV frame (inverse of flowRotate). */
+export function flowUnrotate(ctx: WaterCtx, v: any) {
+  const a = flowAngle(ctx);
+  const c = a.cos();
+  const s = a.sin();
+  return vec2(v.x.mul(c).sub(v.y.mul(s)), v.x.mul(s).add(v.y.mul(c)));
+}
+
 /** UVPanner: uv * (tile*scale) + speed * 0.1 * t (0.1 is constant). */
 export function uvPanner(uv: any, speed: any, tile: any, scale: any, t: any) {
   return uv.mul(vec2(tile).mul(scale)).add(vec2(speed).mul(0.1).mul(t));
@@ -67,7 +91,7 @@ export function paralaxUV(baseUV: any, paralaxDepth: any, viewTS: any = viewDirT
 
 export function surfDistortValue(ctx: WaterCtx) {
   const { u } = ctx;
-  const uv = uvPanner(worldUV(), u.SurfaceDistortion_Pan, vec2(u.SurfaceDistortion_Scale, u.SurfaceDistortion_Scale), float(1), ctx.time);
+  const uv = uvPanner(flowRotate(ctx, worldUV()), u.SurfaceDistortion_Pan, vec2(u.SurfaceDistortion_Scale, u.SurfaceDistortion_Scale), float(1), ctx.time);
   const d = ctx.tex('SurfaceDistortion_Map').sample(uv).r;
   return vec3(d.mul(2).sub(1));
 }

@@ -121,6 +121,20 @@ export function createWaterUniforms() {
     Refraction_Strength: f(0.5),
     Refraction_Distance_Strength: f(0.1),
     Refraction_Distance_Fade: f(0.5),
+    /** Extension (not in Unity): scale the offset by water thickness and distance, with a soft depth test. */
+    Refraction_Physical: f(0),
+    /** Water thickness [m] at which the physical refraction offset reaches full strength. */
+    Refraction_Thickness: f(1.5),
+
+    // Flow (extension; the defaults reproduce the Unity shader exactly)
+    /** Multiplier on every animated term (normals, foam, caustics, shoreline, waves). */
+    Flow_Speed: f(1),
+    /** Rotation of the whole flow field in degrees, in the world XZ plane. */
+    Flow_Direction: f(0),
+    /** Angle between the two normal-map pan directions; 0 is Unity's opposing diagonal pans. */
+    Normal_CrossAngle: f(0),
+    /** 1 = both normal layers drift downstream (+x of the flow frame) so the current reads; 0 = Unity pans. */
+    Flow_Aligned: f(0),
 
     // Caustics
     ENABLECAUSTICS: f(0),

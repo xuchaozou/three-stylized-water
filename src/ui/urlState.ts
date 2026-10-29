@@ -1,4 +1,6 @@
 export interface UrlState {
+  /** 'plant' (default, water-treatment tanks from the GLB) or 'demo' (original Unity terrain scene). */
+  scene: 'plant' | 'demo';
   preset: string | null;
   cam: string | null;
   t: number;
@@ -24,6 +26,7 @@ export function parseUrlState(): UrlState {
   };
   const parsedFps = number('fps', -1);
   return {
+    scene: q.get('scene') === 'demo' ? 'demo' : 'plant',
     preset: q.get('preset'),
     cam: q.get('cam'),
     t: number('t', 10),
