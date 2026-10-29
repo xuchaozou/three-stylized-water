@@ -12,7 +12,7 @@ export const INSPECTOR_SECTIONS: Array<[string, Array<keyof WaterUniforms>]> = [
   ['Lighting', ['ShadowColor', 'Specular_Color', 'Specular_Spread', 'Specular_Hardness', 'Specular_Size']],
   ['Reflection', ['ENABLEPLANERREFLECTION', 'Reflection_Strength', 'Reflection_Fresnel', 'Reflection_Distortion']],
   ['Refraction', ['ENABLEREFRACTION', 'Refraction_Strength', 'Refraction_Distance_Strength', 'Refraction_Distance_Fade', 'Refraction_Physical', 'Refraction_Thickness']],
-  ['Flow', ['Flow_Speed', 'Flow_Direction', 'Normal_CrossAngle', 'Flow_Aligned']],
+  ['Flow', ['Flow_Speed', 'Flow_Direction', 'Normal_CrossAngle', 'Flow_Aligned', 'Flow_Stretch', 'Normal_Shading']],
   ['Caustics', ['ENABLECAUSTICS', 'Caustics_Depth', 'Caustics_Pan', 'Caustics_Scale', 'Caustics_Strength', 'Caustics_Distortion_Strength', 'Caustics_Distortion_Scale', 'Caustics_Start', 'Caustics_Fade']],
   ['Waves', ['ENABLEWAVE', 'Wave_Top_Color', 'Wave1_Length', 'Wave1_Height', 'Wave1_Speed', 'Wave1_Direction', 'Wave1_Sharpness', 'Wave2_Length', 'Wave2_Height', 'Wave2_Speed', 'Wave2_Direction', 'Wave2_Sharpness']],
 ];

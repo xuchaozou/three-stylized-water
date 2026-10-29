@@ -52,6 +52,8 @@ const EXTENSION_DEFAULTS: Record<string, number> = {
   Flow_Speed: 1,
   Normal_CrossAngle: 0,
   Flow_Aligned: 0,
+  Flow_Stretch: 1,
+  Normal_Shading: 0,
 };
 
 export function applyPreset(

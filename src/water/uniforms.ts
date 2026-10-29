@@ -135,6 +135,10 @@ export function createWaterUniforms() {
     Normal_CrossAngle: f(0),
     /** 1 = both normal layers drift downstream (+x of the flow frame) so the current reads; 0 = Unity pans. */
     Flow_Aligned: f(0),
+    /** Elongates the normal-map ripples along the flow (1 = isotropic); streaky ripples read as a current. */
+    Flow_Stretch: f(1),
+    /** Diffuse shading of the ripple normals by the sun (three.js Water style); 0 = unlit Unity look. */
+    Normal_Shading: f(0),
 
     // Caustics
     ENABLECAUSTICS: f(0),

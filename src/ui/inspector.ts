@@ -38,6 +38,8 @@ const FLOW_FIELDS: Array<[key: keyof WaterUniforms, label: string, min: number, 
   ['Flow_Speed', '流速倍率', 0, 20, 0.05],
   ['Flow_Direction', '水流方向(°)', 0, 360, 1],
   ['Normal_CrossAngle', '波纹交错角(°)', 0, 180, 1],
+  ['Flow_Stretch', '波纹顺流拉伸', 1, 6, 0.1],
+  ['Normal_Shading', '波纹明暗(光照)', 0, 3, 0.01],
   ['Normal_Strength', '波纹强度', 0, 2, 0.01],
   ['Normal_Scale', '波纹密度', 1, 30, 0.1],
 ];

@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { Fn, mix, positionLocal, screenUV, texture, vec4 } from 'three/tsl';
+import { dot, Fn, mix, positionLocal, screenUV, texture, vec3, vec4 } from 'three/tsl';
 import type { WaterCtx } from './nodes/types';
 import type { TextureSlot } from './uniforms';
 import { DEFAULT_TEXTURES } from './uniforms';
@@ -12,10 +12,9 @@ import { buildSurfaceFoam, buildUnderwaterLayer } from './nodes/surfaceFoam';
 import { buildIntersection } from './nodes/intersection';
 import { buildShoreline } from './nodes/shoreline';
 import { buildCaustics } from './nodes/caustics';
-import { buildWaterNormal } from './nodes/normals';
+import { buildNormalTS, buildWaterNormal } from './nodes/normals';
 import { buildSpecular } from './nodes/specular';
 import { buildReflection } from './nodes/reflection';
-
 const loader = new THREE.TextureLoader();
 
 export function createTextureRegistry() {
@@ -88,6 +87,13 @@ export function buildWaterMaterial(ctx: WaterCtx) {
 
     const refl = buildReflection(ctx, N);
     rgb = mix(rgb, refl.color, refl.factor);
+    // Ripple diffuse shading (as in three.js Water): faces tilted toward the sun brighten, away darken.
+    // Only the normal-map ripples are shaded; the two near-parallel Gerstner trains would otherwise
+    // print regular crest bands across the tank. Flat-surface basis: T=-X, B=cross(Y,T)=+Z.
+    const nTS = buildNormalTS(ctx);
+    const rippleN = vec3(nTS.x.negate(), nTS.z, nTS.y).normalize();
+    const tilt = dot(rippleN, ctx.sunDirection).sub(ctx.sunDirection.y);
+    rgb = rgb.mul(tilt.mul(u.Normal_Shading).add(1).max(0));
 
     const lit = buildSpecular(ctx, N);
     rgb = rgb.add(lit.specular);

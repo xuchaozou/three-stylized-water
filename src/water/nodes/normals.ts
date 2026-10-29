@@ -22,7 +22,8 @@ export function buildUnscaledNormalMapSample(ctx: WaterCtx) {
 function buildUnscaledNormalMapSampleImpl(ctx: WaterCtx) {
   const { u } = ctx;
   const t = float(ctx.time);
-  const uvBase = flowRotate(ctx, worldUV());
+  const uvFlow = flowRotate(ctx, worldUV());
+  const uvBase = vec2(uvFlow.x.div(u.Flow_Stretch), uvFlow.y);
 
   // Unity pans both layers along the same diagonal in opposite directions, which reads as one sliding
   // sheet. Normal_CrossAngle turns layer B so the two ripple trains interfere and shimmer instead.
@@ -40,9 +41,25 @@ function buildUnscaledNormalMapSampleImpl(ctx: WaterCtx) {
 
   const nA = sampleNormalMap(ctx, uvA);
   const nB = sampleNormalMap(ctx, uvB);
-  const n: any = mix(nA, nB, 0.5); // The source uses an unnormalized average, not whiteout or UDN blending.
+  const nUnity: any = mix(nA, nB, 0.5); // The source uses an unnormalized average, not whiteout or UDN blending.
+
+  // Flow-aligned adds a large swell and a fine chop octave (four octaves, as in three.js Water). All of
+  // them advance downstream at slightly different world speeds, so the surface travels forward as a
+  // whole instead of shimmering in place.
+  const halfCross = cross.mul(0.5);
+  const uvC = uvBase.mul(u.Normal_Scale.mul(0.17))
+    .add(vec2(halfCross.cos(), halfCross.sin().negate()).mul(pan.mul(-0.0136)));
+  const uvD = uvBase.mul(u.Normal_Scale.mul(2.1)).add(vec2(0.37, 0.61))
+    .add(vec2(halfCross.cos(), halfCross.sin()).mul(pan.mul(-0.336)));
+  const nC = sampleNormalMap(ctx, uvC);
+  const nD = sampleNormalMap(ctx, uvD);
+  // Swell dominates the slope; chop only adds sparkle detail.
+  const nFlow: any = nA.mul(0.3).add(nB.mul(0.25)).add(nC.mul(0.3)).add(nD.mul(0.15));
+  const n: any = mix(nUnity, nFlow, u.Flow_Aligned);
+  // Stretching the UV flattens the slope along the flow by the same factor.
+  const nxy = vec2(n.x.div(u.Flow_Stretch), n.y);
   // Tangent xy were sampled in the flow frame; bring them back to the worldUV frame.
-  return vec3(flowUnrotate(ctx, n.xy), n.z) as any;
+  return vec3(flowUnrotate(ctx, nxy), n.z) as any;
 }
 
 // These GT-calibrated limits preserve ripple detail after hardware anisotropy reaches its cap.

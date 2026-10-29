@@ -46,6 +46,13 @@ export interface WaterTypeSpec {
   underwater?: Rgba;
   /** Channel flow: ripples and waves all travel downstream so the current direction reads clearly. */
   stream?: boolean;
+  /**
+   * Ripple-only flow cue for foam-free water: a narrow cross angle makes both ripple layers travel
+   * downstream together and `stretch` elongates them along the current. Overrides the stream defaults.
+   */
+  rippleFlow?: { cross: number; stretch: number };
+  /** Normal_Shading: sun-lit light/dark on the ripples so they show away from the highlight. Default 0.6. */
+  shading?: number;
   /** Flow_Speed multiplier typical for the process. */
   flow: number;
 }
@@ -77,10 +84,12 @@ export const PLANT_WATER_TYPES: Record<string, WaterTypeSpec> = {
   },
   '给水·清水池': {
     process: '给水厂',
-    note: '清水池：成品水，低浊度，蓝绿色透亮，水面平静，可见池底焦散',
+    note: '清水池：成品水，低浊度，蓝绿色透亮，沿廊道缓慢推流，波纹整体向前推进，可见池底焦散',
     shallow: [0.18, 0.55, 0.5, 0.15], deep: [0.01, 0.1, 0.12, 0.72], depth: 2.5, refraction: 0.3, caustics: 0.8,
-    ripple: { strength: 0.45, scale: 8, speed: 0.6, map: 'Normal 1.png' }, waves: { height: 0.006, length: 2.2, speed: 0.6, sharp: 0.2 },
+    ripple: { strength: 0.6, scale: 7, speed: 1.2, map: 'Normal 1.png' }, waves: { height: 0.006, length: 2.2, speed: 0.6, sharp: 0.2 },
     reflection: 1, specular: 12, spread: 0.02,
+    rippleFlow: { cross: 20, stretch: 1.2 },
+    shading: 1.2,
     flow: 1,
   },
 
@@ -164,7 +173,9 @@ function specToPreset(s: WaterTypeSpec): PresetEntry {
     _Normal_DistanceStrength: r.strength * 0.35,
     _Flow_Aligned: 1,
     // A narrow angle keeps a stream's ripples coherent; still tanks need a wide one to shimmer in place.
-    _Normal_CrossAngle: s.stream ? 12 : 70,
+    _Normal_CrossAngle: s.rippleFlow?.cross ?? (s.stream ? 12 : 70),
+    _Flow_Stretch: s.rippleFlow?.stretch ?? (s.stream ? 1.5 : 1),
+    _Normal_Shading: s.shading ?? 0.6,
 
     _ENABLEPLANERREFLECTION: 1,
     _Reflection_Strength: s.reflection,
@@ -215,8 +226,9 @@ function specToPreset(s: WaterTypeSpec): PresetEntry {
   return {
     floats,
     vectors: {
-      _1st_Wave_Direction: s.stream ? [1, 0, 0.12, 0] : [1, 0, 0.25, 0],
-      _2nd_Wave_Direction: s.stream ? [1, 0, -0.35, 0] : [-0.5, 0, 1, 0],
+      // Stream trains still head downstream but cross at ~55° so their crests never line up into bands.
+      _1st_Wave_Direction: s.stream ? [1, 0, 0.3, 0] : [1, 0, 0.25, 0],
+      _2nd_Wave_Direction: s.stream ? [0.7, 0, -0.7, 0] : [-0.5, 0, 1, 0],
       _SurfFoam_Pan: [-drift, 0, 0, 0],
       _SurfFoam_Tile: [1 / stretch, 1, 0, 0],
       _SurfaceDistortion_Pan: s.stream ? [-drift * 1.5, 0, 0, 0] : [0.2, 0.1, 0, 0],
